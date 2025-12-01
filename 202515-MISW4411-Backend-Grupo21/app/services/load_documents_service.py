@@ -283,8 +283,12 @@ async def download_and_process_documents(
                         })
                         logger.info(f"Base de datos vectorial creada exitosamente: {total_chunks} embeddings")
                     else:
-                        rag_error = "Error creando vector store"
+                        error_details = embedding_stats.get("error", "Error desconocido")
+                        traceback_info = embedding_stats.get("traceback", "")
+                        rag_error = f"Error creando vector store: {error_details}"
                         logger.error(rag_error)
+                        if traceback_info:
+                            logger.error(f"Traceback: {traceback_info}")
                         
                 else:
                     rag_error = "No se pudieron procesar documentos para chunking"

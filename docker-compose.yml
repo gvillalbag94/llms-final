@@ -8,6 +8,9 @@ services:
     # env_file opcional - descomentar si tienes un archivo .env
     env_file:
       - ./202515-MISW4411-Backend-Grupo21/.env
+    volumes:
+      # Montar el archivo de credenciales de servicio dentro del contenedor
+      - /Users/felipev9/Documents/andes/llms/llms-final/apikey.json:/app/apikey.json:ro
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -52,8 +55,8 @@ services:
       context: ./MISW4411-Agent-FrontEnd
       dockerfile: Dockerfile
       args:
-        # URL del backend desde el navegador del usuario
-        - VITE_BACKEND_URL=http://localhost:8001
+        # URL del backend desde el navegador del usuario (usar IP pública o DNS)
+        - VITE_BACKEND_URL=http://136.114.46.3:8001
     ports:
       - "3000:80"
     depends_on:

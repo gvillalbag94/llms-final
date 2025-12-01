@@ -190,8 +190,12 @@ class RetrievalService:
             return True, stats
             
         except Exception as e:
+            import traceback
             error_msg = f"Error creando vector store: {str(e)}"
-            return False, {"error": error_msg}
+            error_traceback = traceback.format_exc()
+            print(f"❌ {error_msg}")
+            print(f"Traceback completo:\n{error_traceback}")
+            return False, {"error": error_msg, "traceback": error_traceback}
     
     def get_vector_store(
         self, 
