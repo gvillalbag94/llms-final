@@ -5,9 +5,6 @@ services:
     build:
       context: ./202515-MISW4411-Backend-Grupo21
       dockerfile: Dockerfile
-      # Usar cache para acelerar builds
-      cache_from:
-        - rag-backend:latest
     # env_file opcional - descomentar si tienes un archivo .env
     env_file:
       - ./202515-MISW4411-Backend-Grupo21/.env
@@ -29,9 +26,6 @@ services:
     build:
       context: ./202515-MISW4411-Agent-Backend-Grupo21/app
       dockerfile: Dockerfile
-      # Usar cache para acelerar builds
-      cache_from:
-        - agent-backend:latest
     # env_file opcional - descomentar si tienes un archivo .env
     env_file:
       - ./202515-MISW4411-Agent-Backend-Grupo21/app/.env
