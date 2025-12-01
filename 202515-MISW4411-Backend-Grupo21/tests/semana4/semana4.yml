@@ -1,0 +1,464 @@
+# ===================================================================
+# GITHUB ACTIONS WORKFLOW - SEMANA 4 BACKEND EVALUATION
+# ===================================================================
+# 
+# Este archivo define un pipeline de CI/CD completo para evaluar
+# el backend de la Semana 4, enfocándose en la integración con LangSmith.
+#
+# ESTRUCTURA DEL WORKFLOW:
+# 1. SETUP: Verificación del entorno y dependencias
+# 2. LANGSMITH API KEY: Verificación de API key válida
+# 3. DATA LOADING: Carga de documentos para testing
+# 4. QUERY EXECUTION: Ejecutar consultas para generar trazas
+# 5. TRACE VERIFICATION: Verificar trazas en LangSmith
+# 6. RESULTADO FINAL: Consolidación de resultados
+#
+# CRITERIOS DE EVALUACIÓN SEMANA 4:
+# - API Key válida de LangSmith
+# - Proyecto configurado correctamente
+# - Trazas se envían a LangSmith
+# - Dashboard accesible vía API
+# - Metadata correcta en las trazas
+# ===================================================================
+
+name: Semana 4 - LangSmith Integration Evaluation
+
+# ==================== CONFIGURACIÓN DE TRIGGERS ====================
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# ==================== VARIABLES DE ENTORNO ====================
+env:
+  GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+  LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+  LANGCHAIN_TRACING_V2: "true"
+  LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+  LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+  TEST_QUESTION: "¿Qué información importante contienen estos documentos?"
+
+jobs:
+  # ================================================================
+  # JOB 1: SETUP - Verificar que el entorno básico funciona
+  # ================================================================
+  
+  setup-verification:
+    name: "Setup & Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx langsmith
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Verify basic functionality
+        run: |
+          echo "✅ Dependencies installed successfully"
+          echo "✅ API key configured"
+          echo "✅ Directories created"
+          echo "🚀 Ready for Semana 4 evaluation"
+
+  # ================================================================
+  # JOB 2: LANGSMITH API KEY - Verificar API key válida
+  # ================================================================
+
+  verify-langsmith-api-key:
+    name: "Verify LangSmith API Key"
+    runs-on: ubuntu-latest
+    needs: [setup-verification]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx langsmith
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Test LangSmith API Key
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          echo "🔑 Testing LangSmith API Key..."
+          
+          # Run pytest to verify API key
+          pytest tests/semana4/test_langsmith_connection.py::test_langsmith_api_key_valid -v --tb=short
+          
+          echo "✅ LangSmith API Key is valid"
+      
+      - name: Verify LangSmith Project Access
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          echo "📊 Verifying LangSmith project access..."
+          
+          # Run pytest to verify project access
+          pytest tests/semana4/test_langsmith_connection.py::test_langsmith_project_accessible -v --tb=short
+          
+          echo "✅ LangSmith project is accessible"
+
+  # ================================================================
+  # JOB 3: DATA LOADING - Cargar documentos para testing
+  # ================================================================
+
+  data-loading:
+    name: "Load Test Documents"
+    runs-on: ubuntu-latest
+    needs: [verify-langsmith-api-key]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          pip install langsmith
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      # Usar configuración de chunking del estudiante (de semana 2)
+      - name: Load student's chunking configuration
+        run: |
+          python3 ./tests/semana2/random_chunking_selector.py --semana 2
+          echo "ℹ️ Usando config de chunking del estudiante para cargar documentos"
+      
+      - name: Start server and load documents
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_TRACING_V2: "true"
+          LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+          LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          # Load test documents
+          echo "Loading test documents..."
+          LOAD_RESPONSE=$(jq -n \
+            --arg url "${{ secrets.BASE_URL }}" \
+            --arg collection "semana4_test_collection" \
+            --argjson chunking "$(echo "$RAND_CHUNKING" | jq '.chunking_config')" \
+            '{source_url: $url, collection_name: $collection, chunking_config: $chunking}' \
+            | curl -s -X POST -H "Content-Type: application/json" \
+              -d @- http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+          
+          echo "Load response: '$LOAD_RESPONSE'"
+          
+          if [[ -z "$LOAD_RESPONSE" ]]; then
+            echo "❌ Empty response from document load curl command"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          echo "$LOAD_RESPONSE" | jq . > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Load response is not valid JSON: '$LOAD_RESPONSE'"
+            exit 1
+          fi
+          
+          PROCESSING_ID=$(echo "$LOAD_RESPONSE" | jq -r '.processing_id')
+          echo "Started document loading with ID: $PROCESSING_ID"
+          
+          if [[ "$PROCESSING_ID" == "null" || -z "$PROCESSING_ID" ]]; then
+            echo "❌ Failed to get processing_id from load response"
+            exit 1
+          fi
+          
+          # Wait for documents to be processed
+          echo "Waiting for document processing to complete..."
+          for i in {1..60}; do
+            sleep 5
+            if [ -d "docs/semana4_test_collection" ] && [ "$(find docs/semana4_test_collection -type f | wc -l)" -gt 0 ]; then
+              FILE_COUNT=$(find docs/semana4_test_collection -type f | wc -l)
+              echo "✅ Documents processed successfully: $FILE_COUNT files"
+              break
+            fi
+            echo "Waiting for processing... attempt $i/60"
+          done
+          
+          # Final verification
+          FINAL_COUNT=$(find docs/semana4_test_collection -type f 2>/dev/null | wc -l)
+          if [ "$FINAL_COUNT" -eq 0 ]; then
+            echo "❌ No documents were processed"
+            exit 1
+          fi
+          
+          echo "✅ Document loading completed with $FINAL_COUNT files"
+
+  # ================================================================
+  # JOB 4: QUERY EXECUTION - Ejecutar consultas para generar trazas
+  # ================================================================
+
+  execute-query-test:
+    name: "Execute Query Test"
+    runs-on: ubuntu-latest
+    needs: [data-loading]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          pip install langsmith
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Load student's chunking configuration
+        run: |
+          python3 ./tests/semana2/random_chunking_selector.py --semana 2
+      
+      - name: Ensure test documents are available
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_TRACING_V2: "true"
+          LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+          LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          # Quick document load if needed
+          if [ ! -d "docs/semana4_test_collection" ] || [ "$(find docs/semana4_test_collection -type f | wc -l)" -eq 0 ]; then
+            echo "Reloading test documents..."
+            
+            LOAD_RESPONSE=$(jq -n \
+              --arg url "${{ secrets.BASE_URL }}" \
+              --arg collection "semana4_test_collection" \
+              --argjson chunking "$(echo "$RAND_CHUNKING" | jq '.chunking_config')" \
+              '{source_url: $url, collection_name: $collection, chunking_config: $chunking}' \
+              | curl -s -X POST -H "Content-Type: application/json" \
+                -d @- http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+            
+            sleep 30
+          fi
+      
+      - name: Execute Test Query
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_TRACING_V2: "true"
+          LANGCHAIN_ENDPOINT: "https://api.smith.langchain.com"
+          LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+        run: |
+          echo "❓ Executing test query to generate LangSmith trace..."
+          
+          # Execute query
+          QUERY_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
+            -d "{\"question\": \"$TEST_QUESTION\", \"top_k\": 5, \"collection\": \"semana4_test_collection\"}" \
+            http://localhost:8000/api/v1/ask 2>&1)
+          
+          echo "Query response: '$QUERY_RESPONSE'"
+          
+          if [[ -z "$QUERY_RESPONSE" ]]; then
+            echo "❌ Empty response from query"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          echo "$QUERY_RESPONSE" | jq . > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Query response is not valid JSON: '$QUERY_RESPONSE'"
+            exit 1
+          fi
+          
+          # Verify response has expected structure
+          ANSWER=$(echo "$QUERY_RESPONSE" | jq -r '.answer')
+          if [[ "$ANSWER" == "null" || -z "$ANSWER" ]]; then
+            echo "❌ Response missing answer field"
+            exit 1
+          fi
+          
+          echo "✅ Query executed successfully"
+          echo "Answer preview: ${ANSWER:0:100}..."
+          
+          # Execute additional queries to generate more traces
+          echo "Executing additional queries for trace generation..."
+          
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"question": "¿Cuáles son los contratos principales?", "top_k": 3, "collection": "semana4_test_collection"}' \
+            http://localhost:8000/api/v1/ask > /dev/null 2>&1
+          
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"question": "¿Qué valores monetarios se mencionan?", "top_k": 3, "collection": "semana4_test_collection"}' \
+            http://localhost:8000/api/v1/ask > /dev/null 2>&1
+          
+          echo "✅ Multiple queries executed to generate traces"
+
+  # ================================================================
+  # JOB 5: TRACE VERIFICATION - Verificar trazas en LangSmith
+  # ================================================================
+
+  verify-langsmith-traces:
+    name: "Verify Traces in LangSmith"
+    runs-on: ubuntu-latest
+    needs: [execute-query-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx langsmith
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Wait for LangSmith to process traces
+        run: |
+          echo "⏳ Waiting 60 seconds for LangSmith to process traces..."
+          sleep 60
+          echo "✅ Wait complete"
+      
+      - name: Verify Recent Traces Exist
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+        run: |
+          echo "🔍 Verifying traces in LangSmith..."
+          
+          # Run pytest to verify traces
+          pytest tests/semana4/test_langsmith_traces.py::test_recent_traces_exist -v --tb=short
+          
+          echo "✅ Recent traces found in LangSmith"
+      
+      - name: Verify Trace Metadata
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+        run: |
+          echo "📋 Verifying trace metadata..."
+          
+          # Run pytest to verify trace metadata
+          pytest tests/semana4/test_langsmith_traces.py::test_trace_has_correct_metadata -v --tb=short
+          
+          echo "✅ Trace metadata is correct"
+      
+      - name: Verify Trace Content
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_PROJECT: "misw4411-backend-proyecto"
+        run: |
+          echo "📝 Verifying trace content..."
+          
+          # Run pytest to verify trace content
+          pytest tests/semana4/test_langsmith_traces.py::test_trace_contains_rag_information -v --tb=short
+          
+          echo "✅ Trace content is valid"
+
+  # ================================================================
+  # JOB 6: RESULTADO FINAL - Consolidación de resultados
+  # ================================================================
+
+  final-status:
+    name: "Final Status"
+    runs-on: ubuntu-latest
+    needs: [
+      setup-verification,
+      verify-langsmith-api-key,
+      data-loading,
+      execute-query-test,
+      verify-langsmith-traces
+    ]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          FAILURES=0
+          
+          # Check each job result
+          if [[ "${{ needs.setup-verification.result }}" != "success" ]]; then 
+            echo "❌ Setup verification failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.verify-langsmith-api-key.result }}" != "success" ]]; then 
+            echo "❌ LangSmith API key verification failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.data-loading.result }}" != "success" ]]; then 
+            echo "❌ Data loading failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.execute-query-test.result }}" != "success" ]]; then 
+            echo "❌ Query execution failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.verify-langsmith-traces.result }}" != "success" ]]; then 
+            echo "❌ Trace verification failed"
+            ((FAILURES++))
+          fi
+          
+          echo "Critical failures: $FAILURES"
+          
+          if [ $FAILURES -eq 0 ]; then
+            echo "✅ All Semana 4 tests passed!"
+            echo "🎉 LangSmith integration verified successfully"
+            echo ""
+            echo "📊 SEMANA 4 EVALUATION COMPLETE:"
+            echo "   ✅ API Key: Valid and working"
+            echo "   ✅ Project: Configured correctly"
+            echo "   ✅ Traces: Being sent to LangSmith"
+            echo "   ✅ Dashboard: Accessible via API"
+            echo "   ✅ Metadata: Correct in traces"
+            echo "   ✅ Integration: Complete and functional"
+            exit 0
+          else
+            echo "❌ $FAILURES critical tests failed"
+            echo ""
+            echo "📋 SEMANA 4 EVALUATION FAILED:"
+            echo "   Please check the individual job logs for details"
+            echo "   Focus on: LangSmith API key, configuration, and trace generation"
+            exit 1
+          fi
+
+# ===================================================================
+# NOTAS IMPORTANTES PARA SEMANA 4:
+# ===================================================================
+#
+# 1. API KEY:
+# - Los estudiantes deben agregar su LANGSMITH_API_KEY a GitHub Secrets
+# - La key debe ser válida y tener permisos de lectura/escritura
+#
+# 2. CONFIGURACIÓN:
+# - LANGCHAIN_TRACING_V2 debe estar en "true"
+# - LANGCHAIN_PROJECT debe tener un nombre válido
+# - El servidor debe tener las variables de entorno configuradas
+#
+# 3. TRAZAS:
+# - Las trazas tardan ~60 segundos en procesarse
+# - Debe haber al menos 1 traza generada durante los tests
+# - Las trazas deben contener información de RAG (contexto, respuesta)
+#
+# 4. INDEPENDENCIA DE JOBS:
+# - Cada Job se ejecuta en una máquina virtual nueva
+# - Por eso cada Job reinstala dependencias y recrea el entorno
+# - Los Jobs no comparten estado entre sí
+#
+# ===================================================================

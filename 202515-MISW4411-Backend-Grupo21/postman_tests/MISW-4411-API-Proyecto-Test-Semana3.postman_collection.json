@@ -1,0 +1,538 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "MISW-4411-API-Proyecto-Test-Semana3",
+		"description": "# API Test Collection - Semana 3: Reranking & Query Rewriting\n\n**MISW-4411 Semana 3** - Testing completo de funcionalidades avanzadas de RAG\n\n## Descripción General\n\nEsta colección implementa tests E2E específicos para verificar las funcionalidades avanzadas de Semana 3:\n- **Reranking**: Verificar que los chunks se reordenan por relevancia usando CrossEncoder\n- **Query Rewriting**: Verificar que las consultas se reescriben para mejorar la búsqueda\n- **Funcionalidad Combinada**: Ambas características trabajando juntas en el pipeline RAG\n\n## Funcionalidades Avanzadas Evaluadas\n\n### 1. **Reranking con CrossEncoder** 🔄\n- Reordenamiento de chunks por score de relevancia\n- Scores numéricos en orden descendente\n- Campo `rerank_score` presente en cada chunk\n- Flag `reranker_used: true` cuando se activa\n\n### 2. **Query Rewriting** 📝\n- Reescritura inteligente de consultas para mejorar búsqueda\n- `final_query` diferente a `question` original\n- Preservación del significado original\n- Flag `query_rewriting_used: true` cuando se activa\n\n### 3. **Pipeline RAG Completo** 🚀\n- Integración de todas las funcionalidades (Semana 1 + 2 + 3)\n- Procesamiento optimizado end-to-end\n- Calidad mejorada de respuestas\n- Métricas de rendimiento\n\n## Flujo de Testing Avanzado\n\n1. **Health Check** → Verificar disponibilidad del sistema\n2. **Document Loading** → Cargar documentos con procesamiento completo\n3. **Processing Validation** → Confirmar chunking, embeddings y almacenamiento\n4. **Reranking Test** → Verificar ordenamiento por relevancia\n5. **Query Rewriting Test** → Verificar reescritura de consultas\n6. **Combined Functionality** → Ambas características trabajando juntas\n\n## Variables de Colección\n\n- `baseUrl`: URL base de la API (default: `http://localhost:8000`)\n- `processing_id`: ID de procesamiento (se establece automáticamente)\n- `test_collection_name`: Nombre de colección para pruebas (`semana3_test_collection`)\n- `test_source_url`: URL de Google Drive para testing\n\n## Criterios de Evaluación Avanzados\n\n### **Reranking Exitoso:**\n- `reranker_used: true` cuando se solicita\n- Todos los chunks tienen `rerank_score` numérico\n- Chunks ordenados descendentemente por score\n- Tiempo de procesamiento razonable\n\n### **Query Rewriting Efectivo:**\n- `query_rewriting_used: true` cuando se solicita\n- `final_query != question` (reescritura obligatoria)\n- Consulta reescrita mantiene significado original\n- Mejora en la calidad de búsqueda\n\n### **Funcionalidad Combinada:**\n- Ambas características funcionan simultáneamente\n- Pipeline completo sin errores\n- Calidad de respuesta mejorada\n- Rendimiento aceptable\n\n---\n\n**🔖 Versión**: Semana 3  \n**📅 Fecha**: Octubre 2025  \n**👥 Propósito**: Evaluación de Reranking y Query Rewriting  \n**🎯 Nivel**: Funcionalidades avanzadas de RAG",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "18573230"
+	},
+	"item": [
+		{
+			"name": "1. Health Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"System is healthy\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql('healthy');",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"});",
+							"",
+							"console.log(\"✅ Health check passed - System ready for Semana 3 tests\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/health",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"health"
+					]
+				},
+				"description": "Health Check para Semana 3 - Verificación de disponibilidad del sistema avanzado.\n\nEste endpoint confirma que el sistema está listo para ejecutar funcionalidades avanzadas de Semana 3:\n\n**Validaciones específicas:**\n- Sistema completamente inicializado\n- Servicios de Reranking disponibles\n- Servicios de Query Rewriting disponibles\n- Base de datos vectorial operativa\n- APIs externas accesibles\n\n**Importancia crítica:**\nSin confirmación de salud del sistema, las funcionalidades avanzadas como CrossEncoder y LLM para reescritura podrían fallar silenciosamente.\n\n**Prerequisitos para Semana 3:**\n- Google API Key configurada\n- Modelos de embeddings funcionales\n- ChromaDB inicializada\n- Dependencias avanzadas instaladas"
+			}
+		},
+		{
+			"name": "2. Load Test Documents",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has processing_id\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('processing_id');",
+							"    pm.collectionVariables.set('processing_id', jsonData.processing_id);",
+							"    console.log('📄 Document loading started with ID:', jsonData.processing_id);",
+							"});",
+							"",
+							"pm.test(\"Response structure is correct\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData).to.have.property('message');",
+							"    pm.expect(jsonData).to.have.property('timestamp');",
+							"});",
+							"",
+							"console.log(\"✅ Document loading initiated for Semana 3 tests\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"source_url\": \"{{test_source_url}}\",\n    \"collection_name\": \"{{test_collection_name}}\",\n    \"chunking_config\": {\n        \"chunk_size\": 1000,\n        \"chunk_overlap\": 200,\n        \"chunking_strategy\": \"recursive_character\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/documents/load-from-url",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"documents",
+						"load-from-url"
+					]
+				},
+				"description": "Carga de documentos para testing avanzado de Semana 3.\n\nEste endpoint inicia el procesamiento completo que incluye todas las funcionalidades desarrolladas:\n\n**Pipeline completo de procesamiento:**\n- **Descarga** de documentos desde Google Drive\n- **Chunking** con configuración optimizada\n- **Embedding generation** para búsqueda semántica\n- **Almacenamiento** en ChromaDB para retrieval\n- **Indexación** para reranking posterior\n\n**Configuración específica para Semana 3:**\n- Chunk size optimizado para reranking (1000 caracteres)\n- Overlap configurado para mejor contexto (200 caracteres)\n- Estrategia recursive_character para chunks coherentes\n\n**Preparación para tests avanzados:**\nEstos documentos servirán como base para probar:\n- Efectividad del reranking con diferentes consultas\n- Calidad del query rewriting\n- Rendimiento del pipeline completo\n\n**Validaciones:**\n- Processing ID generado correctamente\n- Procesamiento asíncrono iniciado\n- Timestamp registrado para tracking"
+			}
+		},
+		{
+			"name": "3. Wait and Validate Processing",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Wait for document processing",
+							"console.log('⏳ Waiting 45 seconds for document processing...');",
+							"setTimeout(function(){}, 45000);"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Processing completed successfully\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"});",
+							"",
+							"pm.test(\"Documents were processed\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const data = jsonData.data;",
+							"    ",
+							"    // Check that documents_processed exists and is an array",
+							"    pm.expect(data).to.have.property('documents_processed');",
+							"    pm.expect(data.documents_processed).to.be.an('array');",
+							"    pm.expect(data.documents_processed.length).to.be.above(0);",
+							"    ",
+							"    // Check collection_info for numeric count",
+							"    pm.expect(data).to.have.property('collection_info');",
+							"    pm.expect(data.collection_info).to.have.property('documents_processed_successfully');",
+							"    pm.expect(data.collection_info.documents_processed_successfully).to.be.a('number');",
+							"    pm.expect(data.collection_info.documents_processed_successfully).to.be.above(0);",
+							"    ",
+							"    console.log('📊 Documents processed successfully:', data.collection_info.documents_processed_successfully);",
+							"    console.log('📊 Documents processed (array length):', data.documents_processed.length);",
+							"});",
+							"",
+							"console.log(\"✅ Document processing validation completed\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/documents/load-from-url/{{processing_id}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"documents",
+						"load-from-url",
+						"{{processing_id}}"
+					]
+				},
+				"description": "Validación crítica del procesamiento completo para Semana 3.\n\nEste endpoint verifica que todo el pipeline de procesamiento se completó exitosamente, preparando el sistema para tests avanzados:\n\n**Validaciones del pipeline completo:**\n- **Documentos procesados** exitosamente sin errores\n- **Chunks generados** y almacenados en ChromaDB\n- **Embeddings creados** para búsqueda semántica\n- **Índices construidos** para retrieval eficiente\n- **Metadatos preservados** para reranking\n\n**Preparación para funcionalidades avanzadas:**\n- Base de datos vectorial lista para consultas\n- Chunks indexados para búsqueda rápida\n- Contexto suficiente para query rewriting\n- Documentos diversos para testing de reranking\n\n**Validaciones específicas:**\n- Array de `documents_processed` no vacío\n- Contador numérico `documents_processed_successfully > 0`\n- Sin errores en `failed_documents`\n- Estructura de datos completa y válida\n\n**Tiempo de espera:**\n45 segundos para permitir procesamiento completo incluyendo chunking, embeddings y almacenamiento vectorial."
+			}
+		},
+		{
+			"name": "4. Test Reranking Functionality",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has correct structure\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('question');",
+							"    pm.expect(jsonData).to.have.property('answer');",
+							"    pm.expect(jsonData).to.have.property('reranker_used');",
+							"    pm.expect(jsonData).to.have.property('context_docs');",
+							"});",
+							"",
+							"pm.test(\"Reranking is enabled\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.reranker_used).to.be.true;",
+							"    console.log('🔄 Reranking enabled:', jsonData.reranker_used);",
+							"});",
+							"",
+							"pm.test(\"Documents have rerank_score\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const contextDocs = jsonData.context_docs;",
+							"    ",
+							"    pm.expect(contextDocs).to.be.an('array');",
+							"    pm.expect(contextDocs.length).to.be.above(0, 'Should have retrieved documents');",
+							"    ",
+							"    contextDocs.forEach((doc, index) => {",
+							"        pm.expect(doc).to.have.property('rerank_score');",
+							"        pm.expect(doc.rerank_score).to.be.a('number');",
+							"        console.log(`📄 Doc ${index + 1} rerank_score:`, doc.rerank_score);",
+							"    });",
+							"});",
+							"",
+							"pm.test(\"Documents are sorted by rerank_score (descending)\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const contextDocs = jsonData.context_docs;",
+							"    ",
+							"    if (contextDocs.length > 1) {",
+							"        for (let i = 0; i < contextDocs.length - 1; i++) {",
+							"            const currentScore = contextDocs[i].rerank_score;",
+							"            const nextScore = contextDocs[i + 1].rerank_score;",
+							"            ",
+							"            pm.expect(currentScore).to.be.at.least(nextScore, ",
+							"                `Document ${i + 1} score (${currentScore}) should be >= Document ${i + 2} score (${nextScore})`);",
+							"        }",
+							"        console.log('✅ Documents are properly sorted by rerank_score (descending)');",
+							"    } else {",
+							"        console.log('ℹ️ Only one document retrieved, sorting test not applicable');",
+							"    }",
+							"});",
+							"",
+							"console.log(\"✅ Reranking functionality test completed\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"question\": \"¿Qué contratos tienen valores monetarios importantes?\",\n    \"top_k\": 5,\n    \"collection\": \"{{test_collection_name}}\",\n    \"use_reranking\": true,\n    \"use_query_rewriting\": false\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/ask",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"ask"
+					]
+				},
+				"description": "Test especializado de funcionalidad de Reranking - Semana 3.\n\nEste test evalúa específicamente la implementación del CrossEncoder para reordenar chunks por relevancia:\n\n**Funcionalidad de Reranking evaluada:**\n- **CrossEncoder activo**: `reranker_used: true` cuando se solicita\n- **Scores de relevancia**: Cada chunk debe tener `rerank_score` numérico\n- **Ordenamiento descendente**: Chunks ordenados por score (mayor a menor)\n- **Calidad de ranking**: Chunks más relevantes aparecen primero\n\n**Parámetros del test:**\n- `use_reranking: true` (activar reranking)\n- `use_query_rewriting: false` (aislar funcionalidad)\n- Consulta específica sobre \"contratos con valores monetarios\"\n- `top_k: 5` para evaluar ordenamiento múltiple\n\n**Validaciones técnicas:**\n- Presencia de `rerank_score` en todos los chunks\n- Valores numéricos válidos (pueden ser negativos)\n- Ordenamiento correcto: `score[i] >= score[i+1]`\n- Estructura de respuesta mantenida\n\n**Criterio de éxito:**\nEl CrossEncoder debe reordenar los chunks de manera que los más relevantes para la consulta aparezcan primero, mejorando la calidad de la respuesta final."
+			}
+		},
+		{
+			"name": "5. Test Query Rewriting Functionality",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has correct structure\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('question');",
+							"    pm.expect(jsonData).to.have.property('final_query');",
+							"    pm.expect(jsonData).to.have.property('query_rewriting_used');",
+							"});",
+							"",
+							"pm.test(\"Query rewriting is enabled\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.query_rewriting_used).to.be.true;",
+							"    console.log('📝 Query rewriting enabled:', jsonData.query_rewriting_used);",
+							"});",
+							"",
+							"pm.test(\"Final query is different from original\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const originalQuery = jsonData.question;",
+							"    const finalQuery = jsonData.final_query;",
+							"    ",
+							"    pm.expect(finalQuery).to.not.equal(originalQuery, ",
+							"        `final_query should be different from question when rewriting is enabled. Original: '${originalQuery}', Final: '${finalQuery}'`);",
+							"    ",
+							"    console.log('📝 Original query:', originalQuery);",
+							"    console.log('📝 Rewritten query:', finalQuery);",
+							"});",
+							"",
+							"pm.test(\"Final query is meaningful\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const finalQuery = jsonData.final_query;",
+							"    ",
+							"    pm.expect(finalQuery).to.be.a('string');",
+							"    pm.expect(finalQuery.length).to.be.above(10, 'Rewritten query should be meaningful');",
+							"    pm.expect(finalQuery).to.not.include('null');",
+							"    pm.expect(finalQuery).to.not.include('undefined');",
+							"});",
+							"",
+							"console.log(\"✅ Query rewriting functionality test completed\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"question\": \"¿Qué información importante contienen estos documentos?\",\n    \"top_k\": 5,\n    \"collection\": \"{{test_collection_name}}\",\n    \"use_reranking\": false,\n    \"use_query_rewriting\": true\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/ask",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"ask"
+					]
+				},
+				"description": "Test especializado de funcionalidad de Query Rewriting - Semana 3.\n\nEste test evalúa específicamente la implementación de reescritura de consultas usando LLM para mejorar la búsqueda:\n\n**Funcionalidad de Query Rewriting evaluada:**\n- **LLM activo**: `query_rewriting_used: true` cuando se solicita\n- **Reescritura obligatoria**: `final_query != question` (requisito crítico)\n- **Preservación de significado**: Consulta reescrita mantiene intención original\n- **Mejora de búsqueda**: Consulta optimizada para retrieval vectorial\n\n**Parámetros del test:**\n- `use_query_rewriting: true` (activar reescritura)\n- `use_reranking: false` (aislar funcionalidad)\n- Consulta estándar: \"¿Qué información importante contienen estos documentos?\"\n- Pregunta diseñada para triggear reescritura\n\n**Validaciones críticas:**\n- **Reescritura obligatoria**: `final_query` DEBE ser diferente a `question`\n- Consulta reescrita debe ser string válido (> 10 caracteres)\n- Sin valores null/undefined en la reescritura\n- Consulta debe mantener coherencia semántica\n\n**Criterio de éxito ESTRICTO:**\nEl sistema DEBE reescribir la consulta cuando `use_query_rewriting: true`. Si `final_query == question`, el test FALLA. Esta es una validación inegociable de Semana 3."
+			}
+		},
+		{
+			"name": "6. Test Combined Functionality",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has all required fields\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('question');",
+							"    pm.expect(jsonData).to.have.property('final_query');",
+							"    pm.expect(jsonData).to.have.property('query_rewriting_used');",
+							"    pm.expect(jsonData).to.have.property('reranker_used');",
+							"    pm.expect(jsonData).to.have.property('context_docs');",
+							"});",
+							"",
+							"pm.test(\"Both features are enabled\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.query_rewriting_used).to.be.true;",
+							"    pm.expect(jsonData.reranker_used).to.be.true;",
+							"    console.log('🔄📝 Both reranking and query rewriting enabled');",
+							"});",
+							"",
+							"pm.test(\"Query rewriting works in combined mode\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const originalQuery = jsonData.question;",
+							"    const finalQuery = jsonData.final_query;",
+							"    ",
+							"    // Query rewriting must be enabled",
+							"    pm.expect(jsonData.query_rewriting_used).to.be.true;",
+							"    ",
+							"    // Query MUST be rewritten when query_rewriting_used is true",
+							"    pm.expect(finalQuery).to.not.equal(originalQuery, ",
+							"        `final_query MUST be different from question when query rewriting is enabled. Original: '${originalQuery}', Final: '${finalQuery}'`);",
+							"    ",
+							"    console.log('✅ Query was rewritten successfully');",
+							"    console.log('📝 Original:', originalQuery);",
+							"    console.log('📝 Rewritten:', finalQuery);",
+							"});",
+							"",
+							"pm.test(\"Reranking works in combined mode\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    const contextDocs = jsonData.context_docs;",
+							"    ",
+							"    pm.expect(contextDocs).to.be.an('array');",
+							"    pm.expect(contextDocs.length).to.be.above(0, 'Should have retrieved documents');",
+							"    ",
+							"    // Check all documents have rerank_score",
+							"    contextDocs.forEach((doc, index) => {",
+							"        pm.expect(doc).to.have.property('rerank_score');",
+							"        pm.expect(doc.rerank_score).to.be.a('number');",
+							"    });",
+							"    ",
+							"    // Check sorting if multiple documents",
+							"    if (contextDocs.length > 1) {",
+							"        for (let i = 0; i < contextDocs.length - 1; i++) {",
+							"            const currentScore = contextDocs[i].rerank_score;",
+							"            const nextScore = contextDocs[i + 1].rerank_score;",
+							"            pm.expect(currentScore).to.be.at.least(nextScore);",
+							"        }",
+							"    }",
+							"});",
+							"",
+							"pm.test(\"Response time is reasonable\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.response_time_sec).to.be.a('number');",
+							"    pm.expect(jsonData.response_time_sec).to.be.below(120, 'Combined processing should complete within 2 minutes');",
+							"});",
+							"",
+							"console.log(\"✅ Combined functionality test completed successfully\");",
+							"console.log(\"🎉 All Semana 3 tests passed!\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"question\": \"¿Qué información importante contienen estos documentos?\",\n    \"top_k\": 5,\n    \"collection\": \"{{test_collection_name}}\",\n    \"use_reranking\": true,\n    \"use_query_rewriting\": true\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/ask",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"ask"
+					]
+				},
+				"description": "Test completo de pipeline RAG avanzado - Funcionalidades combinadas de Semana 3.\n\nEste test final evalúa la integración completa de todas las funcionalidades avanzadas trabajando simultáneamente:\n\n**Pipeline RAG completo evaluado:**\n1. **Query Rewriting**: Reescritura inicial de la consulta\n2. **Vector Retrieval**: Búsqueda semántica con consulta optimizada\n3. **Reranking**: Reordenamiento por relevancia con CrossEncoder\n4. **Response Generation**: Generación final con contexto optimizado\n\n**Validaciones de integración:**\n- **Ambas funcionalidades activas**: `query_rewriting_used: true` Y `reranker_used: true`\n- **Query rewriting funcional**: `final_query != question` (obligatorio)\n- **Reranking funcional**: Chunks con `rerank_score` ordenados descendentemente\n- **Pipeline sin errores**: Procesamiento completo sin fallos\n- **Rendimiento aceptable**: Tiempo total < 120 segundos\n\n**Consulta de prueba:**\nLa misma consulta estándar para consistencia: \"¿Qué información importante contienen estos documentos?\"\n\n**Criterios de éxito combinados:**\n- ✅ Reescritura efectiva de la consulta\n- ✅ Recuperación mejorada de chunks relevantes\n- ✅ Reordenamiento por relevancia\n- ✅ Respuesta de mayor calidad\n- ✅ Pipeline completo funcional\n\n**Importancia:**\nEste test confirma que todas las mejoras de Semana 3 funcionan en conjunto, demostrando un sistema RAG completamente optimizado."
+			}
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "global-prerequest",
+				"exec": [
+					"// Global pre-request script for Semana 3 tests",
+					"console.log('🚀 Executing Semana 3 test:', pm.info.requestName);"
+				],
+				"type": "text/javascript"
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "global-test",
+				"exec": [
+					"// Global test script for Semana 3",
+					"pm.test(\"Response time is acceptable\", function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(60000);",
+					"});",
+					"",
+					"// Log response for debugging if needed",
+					"if (pm.response.code !== 200) {",
+					"    console.log('❌ Response status:', pm.response.status);",
+					"    console.log('❌ Response body:', pm.response.text());",
+					"}"
+				],
+				"type": "text/javascript"
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "test_collection_name",
+			"value": "semana3_test_collection",
+			"type": "string"
+		},
+		{
+			"key": "test_source_url",
+			"value": "https://drive.google.com/drive/folders/1nNGR_MG2gQaN_2dQzaWNGKNFKCvNjKzd",
+			"type": "string"
+		},
+		{
+			"key": "processing_id",
+			"value": "processing_id",
+			"type": "string"
+		}
+	]
+}

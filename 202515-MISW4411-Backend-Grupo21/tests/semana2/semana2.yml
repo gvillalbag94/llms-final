@@ -1,0 +1,578 @@
+# ===================================================================
+# GITHUB ACTIONS WORKFLOW - SEMANA 2 BACKEND EVALUATION
+# ===================================================================
+# 
+# Este archivo define un pipeline de CI/CD completo para evaluar
+# el backend de la Semana 2, enfocándose en chunking y base de datos vectorial.
+#
+# ESTRUCTURA DEL WORKFLOW:
+# 1. SETUP: Verificación del entorno y dependencias
+# 2. DATA LOADING: Carga de documentos para testing
+# 3. CHUNKING TESTS: Verificación de creación de chunks
+# 4. DATABASE TESTS: Verificación de carga en base de datos vectorial
+# 5. E2E TESTS: Pruebas end-to-end con Postman
+# 6. RESULTADO FINAL: Consolidación de resultados
+#
+# CRITERIOS DE EVALUACIÓN SEMANA 2:
+# - Chunking: Los documentos deben dividirse en chunks apropiados
+# - Database: Los chunks deben cargarse en la base de datos vectorial
+# - Retrieval: Debe poder recuperar chunks relevantes
+# ===================================================================
+
+name: Semana 2 - Chunking and Vector Database Evaluation
+
+# ==================== CONFIGURACIÓN DE TRIGGERS ====================
+on:
+  push:
+    branches: [ main]
+  pull_request:
+    branches: [ main ]
+
+# ==================== VARIABLES DE ENTORNO ====================
+env:
+  GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+  TEST_QUESTION: "¿Qué información importante contienen estos documentos?"
+
+jobs:
+  # ================================================================
+  # JOB 1: SETUP - Verificar que el entorno básico funciona
+  # ================================================================
+  
+  setup-verification:
+    name: "Setup & Dependencies"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Verify basic functionality
+        run: |
+          echo "✅ Dependencies installed successfully"
+          echo "✅ API key configured"
+          echo "✅ Directories created"
+          echo "🚀 Ready for Semana 2 evaluation"
+
+  # ================================================================
+  # JOB 2: DATA LOADING - Cargar documentos para testing
+  # ================================================================
+
+  data-loading:
+    name: "Load Test Documents"
+    runs-on: ubuntu-latest
+    needs: [setup-verification]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+
+      - name: Loads a random chunking strategy
+        run: |
+          python3 ./tests/semana2/random_chunking_selector.py --semana 2
+      
+      - name: Start server and load documents
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          # Load test documents with chunking configuration
+          echo "Loading test documents with chunking configuration..."
+          LOAD_RESPONSE=$(jq -n \
+            --arg url "${{ secrets.BASE_URL }}" \
+            --arg collection "semana2_test_collection" \
+            --argjson chunking "$(echo "$RAND_CHUNKING" | jq '.chunking_config')" \
+            '{source_url: $url, collection_name: $collection, chunking_config: $chunking}' \
+            | curl -s -X POST -H "Content-Type: application/json" \
+              -d @- http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+          
+          echo "Load response: '$LOAD_RESPONSE'"
+          
+          if [[ -z "$LOAD_RESPONSE" ]]; then
+            echo "❌ Empty response from document load curl command"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          echo "$LOAD_RESPONSE" | jq . > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Load response is not valid JSON: '$LOAD_RESPONSE'"
+            exit 1
+          fi
+          
+          PROCESSING_ID=$(echo "$LOAD_RESPONSE" | jq -r '.processing_id')
+          echo "Started document loading with ID: $PROCESSING_ID"
+          
+          if [[ "$PROCESSING_ID" == "null" || -z "$PROCESSING_ID" ]]; then
+            echo "❌ Failed to get processing_id from load response"
+            exit 1
+          fi
+          
+          # Wait for documents to be processed
+          echo "Waiting for document processing to complete..."
+          for i in {1..60}; do
+            sleep 5
+            if [ -d "docs/semana2_test_collection" ] && [ "$(find docs/semana2_test_collection -type f | wc -l)" -gt 0 ]; then
+              FILE_COUNT=$(find docs/semana2_test_collection -type f | wc -l)
+              echo "✅ Documents processed successfully: $FILE_COUNT files"
+              break
+            fi
+            echo "Waiting for processing... attempt $i/60"
+          done
+          
+          # Final verification
+          FINAL_COUNT=$(find docs/semana2_test_collection -type f 2>/dev/null | wc -l)
+          if [ "$FINAL_COUNT" -eq 0 ]; then
+            echo "❌ No documents were processed"
+            exit 1
+          fi
+          
+          echo "✅ Document loading completed with $FINAL_COUNT files"
+
+  # ================================================================
+  # JOB 3: CHUNKING TESTS - Verificar creación de chunks
+  # ================================================================
+
+  test-chunks-creation:
+    name: "Chunks Creation Tests"
+    runs-on: ubuntu-latest
+    needs: [data-loading]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+
+      - name: Loads a random chunking strategy
+        run: |
+          python3 ./tests/semana2/random_chunking_selector.py --semana 2
+      
+      - name: Ensure test documents are available
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          # Quick document load if needed
+          if [ ! -d "docs/semana2_test_collection" ] || [ "$(find docs/semana2_test_collection -type f | wc -l)" -eq 0 ]; then
+            echo "Reloading test documents..."
+            
+            LOAD_RESPONSE=$(jq -n \
+              --arg url "${{ secrets.BASE_URL }}" \
+              --arg collection "semana2_test_collection" \
+              --argjson chunking "$(echo "$RAND_CHUNKING" | jq '.chunking_config')" \
+              '{source_url: $url, collection_name: $collection, chunking_config: $chunking}' \
+              | curl -s -X POST -H "Content-Type: application/json" \
+                -d @- http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+            
+            echo "Load response: '$LOAD_RESPONSE'"
+            
+            if [[ -z "$LOAD_RESPONSE" ]]; then
+              echo "❌ Empty response from document load curl command"
+              exit 1
+            fi
+            
+            # Check if response is valid JSON
+            echo "$LOAD_RESPONSE" | jq . > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+              echo "❌ Load response is not valid JSON: '$LOAD_RESPONSE'"
+              exit 1
+            fi
+            
+            PROCESSING_ID=$(echo "$LOAD_RESPONSE" | jq -r '.processing_id')
+            echo "Document loading started with processing_id: $PROCESSING_ID"
+            
+            if [[ "$PROCESSING_ID" == "null" || -z "$PROCESSING_ID" ]]; then
+              echo "❌ Failed to get processing_id from load response"
+              exit 1
+            fi
+            
+            sleep 30
+          fi
+          
+          # Verify we have documents
+          FILE_COUNT=$(find docs/semana2_test_collection -type f 2>/dev/null | wc -l)
+          echo "Documents available: $FILE_COUNT files"
+      
+      - name: Test Chunks Creation via Ask Endpoint
+        run: |
+          echo "📄 Testing chunks creation through ask endpoint..."
+          
+          # Test ask endpoint to verify chunks are being retrieved
+          ASK_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
+            -d "{\"question\": \"$TEST_QUESTION\", \"top_k\": 5, \"collection\": \"test_collection\"}" \
+            http://localhost:8000/api/v1/ask 2>&1)
+          
+          echo "Ask response: '$ASK_RESPONSE'"
+          
+          if [[ -z "$ASK_RESPONSE" ]]; then
+            echo "❌ Empty response from ask curl command"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          echo "$ASK_RESPONSE" | jq . > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Ask response is not valid JSON: '$ASK_RESPONSE'"
+            exit 1
+          fi
+          
+          # Extract context_docs to verify chunks
+          CONTEXT_DOCS=$(echo "$ASK_RESPONSE" | jq -r '.context_docs')
+          CONTEXT_COUNT=$(echo "$CONTEXT_DOCS" | jq 'length')
+          
+          echo "📊 Number of chunks retrieved: $CONTEXT_COUNT"
+          
+          # Verify we have at least 2 chunks
+          if [ "$CONTEXT_COUNT" -lt 2 ]; then
+            echo "❌ Expected at least 2 chunks, got $CONTEXT_COUNT"
+            echo "Context docs: $CONTEXT_DOCS"
+            exit 1
+          fi
+          
+          echo "✅ Retrieved $CONTEXT_COUNT chunks successfully"
+          
+          # Verify chunks have adequate length (at least 100 characters)
+          CHUNK_LENGTHS=$(echo "$CONTEXT_DOCS" | jq -r '.[].snippet | length')
+          MIN_LENGTH=100
+          
+          echo "📏 Checking chunk lengths..."
+          CHUNK_INDEX=0
+          echo "$CHUNK_LENGTHS" | while read length; do
+            CHUNK_INDEX=$((CHUNK_INDEX + 1))
+            echo "Chunk $CHUNK_INDEX length: $length characters"
+            
+            if [ "$length" -lt "$MIN_LENGTH" ]; then
+              echo "❌ Chunk $CHUNK_INDEX is too short: $length characters (minimum: $MIN_LENGTH)"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All chunks have adequate length (>= $MIN_LENGTH characters)"
+          
+          # Verify response is not empty
+          answer=$(echo "$ASK_RESPONSE" | jq -r '.answer')
+          if [[ "$answer" == "null" || -z "$answer" || "$answer" == "No se encontraron documentos relevantes." ]]; then
+            echo "❌ Response is empty or indicates no relevant documents found"
+            echo "Response: $answer"
+            exit 1
+          fi
+          
+          echo "✅ Response is not empty: ${answer:0:100}..."
+          echo "✅ Chunks creation test completed successfully"
+
+  # ================================================================
+  # JOB 4: DATABASE TESTS - Verificar carga en base de datos vectorial
+  # ================================================================
+
+  test-chunks-database:
+    name: "Chunks Database Tests"
+    runs-on: ubuntu-latest
+    needs: [test-chunks-creation]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Loads a random chunking strategy
+        run: |
+          python3 ./tests/semana2/random_chunking_selector.py --semana 2
+      
+      - name: Test Vector Database Loading
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          # Ensure documents are loaded
+          if [ ! -d "docs/semana2_test_collection" ] || [ "$(find docs/semana2_test_collection -type f | wc -l)" -eq 0 ]; then
+            echo "Loading documents for database test..."
+            
+            LOAD_RESPONSE=$(jq -n \
+              --arg url "${{ secrets.BASE_URL }}" \
+              --arg collection "semana2_test_collection" \
+              --argjson chunking "$(echo "$RAND_CHUNKING" | jq '.chunking_config')" \
+              '{source_url: $url, collection_name: $collection, chunking_config: $chunking}' \
+              | curl -s -X POST -H "Content-Type: application/json" \
+                -d @- http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+            
+            echo "Load response: '$LOAD_RESPONSE'"
+            
+            if [[ -z "$LOAD_RESPONSE" ]]; then
+              echo "❌ Empty response from document load curl command"
+              exit 1
+            fi
+            
+            # Check if response is valid JSON
+            echo "$LOAD_RESPONSE" | jq . > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+              echo "❌ Load response is not valid JSON: '$LOAD_RESPONSE'"
+              exit 1
+            fi
+            
+            PROCESSING_ID=$(echo "$LOAD_RESPONSE" | jq -r '.processing_id')
+            echo "Document loading started with processing_id: $PROCESSING_ID"
+            
+            if [[ "$PROCESSING_ID" == "null" || -z "$PROCESSING_ID" ]]; then
+              echo "❌ Failed to get processing_id from load response"
+              exit 1
+            fi
+            
+            sleep 30
+          fi
+          
+          echo "🗄️ Testing vector database functionality..."
+          
+          # Test multiple queries to verify database is working
+          # TODO: Preguntas especificas del CIFI
+          QUERIES=("¿Qué información contienen los documentos?" "¿Cuáles son los contratos principales?" "¿Qué valores monetarios se mencionan?")
+          
+          for QUERY in "${QUERIES[@]}"; do
+            echo "Testing query: $QUERY"
+            
+            DB_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
+              -d "{\"question\": \"$QUERY\", \"top_k\": 3, \"collection\": \"test_collection\"}" \
+              http://localhost:8000/api/v1/ask 2>&1)
+            
+            if [[ -z "$DB_RESPONSE" ]]; then
+              echo "❌ Empty response for query: $QUERY"
+              exit 1
+            fi
+            
+            # Check if response is valid JSON
+            echo "$DB_RESPONSE" | jq . > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+              echo "❌ Invalid JSON response for query: $QUERY"
+              exit 1
+            fi
+            
+            # Verify chunks are retrieved from database
+            DB_CONTEXT_DOCS=$(echo "$DB_RESPONSE" | jq -r '.context_docs')
+            DB_CONTEXT_COUNT=$(echo "$DB_CONTEXT_DOCS" | jq 'length')
+            
+            if [ "$DB_CONTEXT_COUNT" -lt 1 ]; then
+              echo "❌ No chunks retrieved from database for query: $QUERY"
+              exit 1
+            fi
+            
+            echo "✅ Retrieved $DB_CONTEXT_COUNT chunks from database for query: $QUERY"
+          done
+          
+          echo "✅ Vector database is working correctly"
+          echo "✅ Chunks are properly loaded and retrievable from database"
+
+  # ================================================================
+  # JOB 5: E2E POSTMAN TESTS
+  # ================================================================
+
+  e2e-postman-tests:
+    name: "Postman E2E Tests"
+    runs-on: ubuntu-latest
+    needs: [test-chunks-database]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Loads a random chunking strategy
+        run: |
+          python3 ./tests/semana2/random_chunking_selector.py --semana 2
+      
+      - name: Loads sample questions
+        run: |
+          export QUESTIONS=$(cat ./tests/semana2/sample_questions.json | jq -r)
+          export EXPECT_RESPONSE=$(echo $QUESTIONS | jq -r '.EXPECT_RESPONSE.question')
+          export DONT_EXPECT_RESPONSE=$(echo $QUESTIONS | jq -r '.DONT_EXPECT_RESPONSE.question')
+          echo "EXPECT_RESPONSE=$EXPECT_RESPONSE" >> $GITHUB_ENV
+          echo "DONT_EXPECT_RESPONSE=$DONT_EXPECT_RESPONSE" >> $GITHUB_ENV
+      
+      - run: |
+          pip install -r requirements.txt
+          pip install ragas
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      
+      - name: Start server for E2E tests
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+      
+      - run: npm install -g newman
+      
+      - name: Run Postman E2E Tests for Semana 2
+        run: |
+          echo "🔮 Running comprehensive E2E tests for Semana 2..."
+          echo "📋 Testing: Chunking + Vector Database functionality"
+          
+          newman run postman_tests/MISW-4411-API-Proyecto-Test-Semana2.postman_collection.json \
+            --env-var "valid_url=${{ secrets.BASE_URL }}" \
+            --env-var "q_ok_response=$EXPECT_RESPONSE" \
+            --env-var "q_error_response=$DONT_EXPECT_RESPONSE" \
+            --env-var "body_load=$RAND_CHUNKING" \
+            --color on \
+            --reporters cli,json \
+            --reporter-json-export postman-results-semana2.json \
+            --delay-request 2000 \
+            --timeout-request 120000
+          
+          echo "✅ Semana 2 E2E tests completed"
+      
+      - name: Analyze Postman Results
+        if: always()
+        run: |
+          if [ -f postman-results-semana2.json ]; then
+            TOTAL_TESTS=$(jq '.run.stats.assertions.total' postman-results-semana2.json)
+            FAILED_TESTS=$(jq '.run.stats.assertions.failed' postman-results-semana2.json)
+            
+            echo "📊 Postman Results: $FAILED_TESTS failed out of $TOTAL_TESTS total assertions"
+            
+            if [ "$FAILED_TESTS" -eq 0 ]; then
+              echo "✅ All Postman tests passed"
+            else
+              echo "⚠️ Some Postman tests failed"
+              echo "Failed test details:"
+              jq -r '.run.executions[] | select(.assertions | map(select(.error)) | length > 0) | .item.name + ": " + (.assertions[] | select(.error) | .error.message)' postman-results-semana2.json | head -10
+            fi
+          else
+            echo "⚠️ Postman results file not found"
+          fi
+      
+      - name: Evaluate generated answers with RAGAS
+        run: |
+          ANSWER_EXP=$(jq -r '.environment.values[] | select(.key=="Answer_expected") | .value' postman-results-semana2.json)
+          CONTEXT_EXP=$(jq -r '.environment.values[] | select(.key=="Context_expected") | .value' postman-results-semana2.json)
+
+          ANSWER_NOT_EXP=$(jq -r '.environment.values[] | select(.key=="Answer_not_expected") | .value' postman-results-semana2.json)
+          CONTEXT_NOT_EXP=$(jq -r '.environment.values[] | select(.key=="Context_not_expected") | .value' postman-results-semana2.json)
+
+          export QUESTIONS=$(cat ./tests/semana2/sample_questions.json | jq -r)
+
+          python3 ./tests/semana2/ragas_eval.py \
+            --ans_exp "$ANSWER_EXP" \
+            --ctx_exp "$CONTEXT_EXP" \
+            --ans_not_exp "$ANSWER_NOT_EXP" \
+            --ctx_not_exp "$CONTEXT_NOT_EXP" \
+            --questions "$QUESTIONS"
+
+  # ================================================================
+  # JOB 6: RESULTADO FINAL
+  # ================================================================
+
+  final-status:
+    name: "Final Status"
+    runs-on: ubuntu-latest
+    needs: [setup-verification, data-loading, test-chunks-creation, test-chunks-database, e2e-postman-tests]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          FAILURES=0
+          
+          # Check each job result
+          if [[ "${{ needs.setup-verification.result }}" != "success" ]]; then 
+            echo "❌ Setup verification failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.data-loading.result }}" != "success" ]]; then 
+            echo "❌ Data loading failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.test-chunks-creation.result }}" != "success" ]]; then 
+            echo "❌ Chunks creation tests failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.test-chunks-database.result }}" != "success" ]]; then 
+            echo "❌ Chunks database tests failed"
+            ((FAILURES++))
+          fi
+          
+          if [[ "${{ needs.e2e-postman-tests.result }}" != "success" ]]; then 
+            echo "❌ E2E Postman tests failed"
+            ((FAILURES++))
+          fi
+          
+          echo "Critical failures: $FAILURES"
+          
+          if [ $FAILURES -eq 0 ]; then
+            echo "✅ All Semana 2 tests passed!"
+            echo "🎉 Chunking and Vector Database functionality verified"
+            echo ""
+            echo "📊 SEMANA 2 EVALUATION COMPLETE:"
+            echo "   ✅ Chunking: Documents properly divided into chunks"
+            echo "   ✅ Database: Chunks loaded into vector database"
+            echo "   ✅ Retrieval: Chunks retrievable with adequate length"
+            echo "   ✅ Integration: Proper API responses and functionality"
+            echo "   ✅ E2E: Comprehensive Postman collection validation"
+            exit 0
+          else
+            echo "❌ $FAILURES critical tests failed"
+            echo ""
+            echo "📋 SEMANA 2 EVALUATION FAILED:"
+            echo "   Please check the individual job logs for details"
+            echo "   Focus on: Chunking functionality and Vector Database"
+            exit 1
+          fi
+
+# ===================================================================
+# NOTAS IMPORTANTES PARA SEMANA 2:
+# ===================================================================
+#
+# 1. CHUNKING:
+# - Los documentos deben dividirse en chunks apropiados
+# - Los chunks deben tener al menos 100 caracteres
+# - Debe recuperar al menos 2 chunks por consulta
+#
+# 2. BASE DE DATOS VECTORIAL:
+# - Los chunks deben cargarse correctamente en la base de datos
+# - Debe poder recuperar chunks relevantes para diferentes consultas
+# - La answer no debe estar vacía
+#
+# 3. FUNCIONALIDAD BÁSICA:
+# - El endpoint ask debe funcionar correctamente
+# - Debe manejar diferentes tipos de consultas
+# - La estructura de answer debe ser correcta
+#
+# ===================================================================

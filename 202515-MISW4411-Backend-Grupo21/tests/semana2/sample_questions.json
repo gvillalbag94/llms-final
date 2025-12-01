@@ -1,0 +1,14 @@
+{
+    "EXPECT_RESPONSE": {
+        "question": "¿Qué es Python y para qué se usa?",
+        "reference_answer": "Python es un lenguaje de programación de alto nivel usado para desarrollo web, análisis de datos, inteligencia artificial y automatización.",
+        "answer": "",
+        "retrieved_contexts": []
+    },
+    "DONT_EXPECT_RESPONSE": {
+        "question": "¿Cuál es la sintaxis para declarar una clase en Java?",
+        "reference_answer": "No tengo información suficiente en la base de datos para responder a esta pregunta.",
+        "answer": "",
+        "retrieved_contexts": []
+    }
+}

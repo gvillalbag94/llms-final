@@ -1,0 +1,17 @@
+langchain-mcp-adapters
+langchain-google-genai
+langchain-huggingface
+langchain-huggingface
+sentence-transformers
+langchain-chroma
+google-genai
+langchain==0.3.27
+langgraph
+pydantic
+fastmcp
+fastapi
+wikipedia-api
+httpx
+requests
+mcp
+uv

@@ -1,0 +1,542 @@
+{
+	"info": {
+		"_postman_id": "97ebf5fa-9cec-4a94-88d5-162a21723b19",
+		"name": "MISW-4411-API-Proyecto-Test-Semana2",
+		"description": "# API Test Collection - Semana 2: Chunking & Embeddings\n\n**MISW-4411 Semana 2** - Testing completo de funcionalidades de procesamiento de documentos\n\n## Descripción General\n\nEsta colección implementa tests E2E específicos para verificar las funcionalidades de Semana 2:\n- **Chunking**: Verificar que los documentos se dividen correctamente en fragmentos\n- **Embeddings**: Verificar que se generan embeddings y se almacenan en la base vectorial\n- **Retrieval**: Verificar que se recuperan chunks relevantes para las consultas\n- **Generation**: Verificar que se generan respuestas contextualizadas\n\n## Funcionalidades Evaluadas\n\n### 1. **Gestión de Documentos** 📁\n- Carga y procesamiento asíncrono desde URLs\n- Validación de chunking y almacenamiento\n- Verificación de chunks cargados en base de datos\n\n### 2. **Sistema RAG Básico** 🤖\n- Recuperación de chunks relevantes (mínimo 2)\n- Generación de respuestas no vacías\n- Validación de estructura de respuesta\n- Verificación de longitud mínima de chunks (100 caracteres)\n\n### 3. **Control de Calidad** ✅\n- Respuestas estructuradas y completas\n- Tiempos de respuesta aceptables\n- Manejo de diferentes tipos de consultas\n\n## Flujo de Testing\n\n1. **Health Check** → Verificar disponibilidad del sistema\n2. **Document Loading** → Cargar documentos de prueba con chunking\n3. **Validation** → Confirmar chunks en base de datos\n4. **Ask Questions** → Verificar recuperación y generación\n   - Pregunta esperando respuesta\n   - Pregunta sin respuesta esperada\n   - Pregunta aleatoria para robustez\n\n## Variables de Colección\n\n- `base_url`: URL base de la API (default: `http://0.0.0.0:8000`)\n- `collection_name`: Nombre de colección para pruebas (`test_collection`)\n- `valid_processing_id`: ID de procesamiento (se establece automáticamente)\n- `body_load`: Configuración de carga de documentos\n- `q_ok_response`: Pregunta que debe generar respuesta\n- `q_error_response`: Pregunta que puede no generar respuesta\n\n## Criterios de Evaluación\n\n### **Chunking Exitoso:**\n- `total_chunks_after > total_chunks_before`\n- Documentos procesados sin errores\n- Chunks almacenados en base vectorial\n\n### **Retrieval Funcional:**\n- Al menos 2 chunks recuperados por consulta\n- Chunks con longitud mínima de 100 caracteres\n- Estructura correcta de context_docs\n\n### **Generation Efectiva:**\n- Respuestas no vacías\n- Tiempo de respuesta < 30 segundos\n- Estructura JSON válida\n\n---\n\n**🔖 Versión**: Semana 2  \n**📅 Fecha**: Octubre 2025  \n**👥 Propósito**: Evaluación de Chunking, Embeddings y RAG Básico",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "18573230",
+		"_collection_link": "https://restless-star-769911.postman.co/workspace/MISW4411-Proyecto~e641b0f8-2aaf-40df-8501-319c34933bf1/collection/18573230-97ebf5fa-9cec-4a94-88d5-162a21723b19?action=share&source=collection_link&creator=18573230"
+	},
+	"item": [
+		{
+			"name": "1. Verificar Estado del Servicio",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Servicio está saludable\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"    pm.expect(jsonData.status).to.equal('healthy');",
+							"});",
+							"",
+							"pm.test(\"Response contiene información del servicio\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('timestamp');",
+							"    pm.expect(jsonData).to.have.property('service');",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/health",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"health"
+					]
+				},
+				"description": "Endpoint de verificación de salud del sistema para Semana 2.\n\nEste endpoint confirma que la API está funcionando correctamente antes de ejecutar los tests de chunking, embeddings y RAG básico.\n\n**Validaciones específicas:**\n- Status code 200\n- Estructura de respuesta correcta\n- Sistema marcado como 'healthy'\n- Timestamp válido\n\n**Crítico para Semana 2:** Este endpoint debe responder antes de proceder con tests de procesamiento de documentos."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Carga de una colección",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"",
+							"pm.test(\"Status code es 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response tiene estructura correcta\", function () {",
+							"    pm.expect(jsonData).to.have.property('success');",
+							"    pm.expect(jsonData).to.have.property('message');",
+							"    pm.expect(jsonData).to.have.property('processing_id');",
+							"    pm.expect(jsonData).to.have.property('timestamp');",
+							"});",
+							"",
+							"pm.test(\"Success es true\", function () {",
+							"    pm.expect(jsonData.success).to.be.true;",
+							"});",
+							"",
+							"pm.test(\"Processing ID tiene formato correcto\", function () {",
+							"    pm.expect(jsonData.processing_id).to.match(/^proc_[a-f0-9]{12}$/);",
+							"});",
+							"",
+							"pm.test(\"Timestamp es válido\", function () {",
+							"    const timestamp = new Date(jsonData.timestamp);",
+							"    pm.expect(timestamp.toString()).to.not.equal('Invalid Date');",
+							"});",
+							"",
+							"pm.environment.set(\"valid_processing_id\", jsonData.processing_id)"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{{body_load}}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/documents/load-from-url",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"documents",
+						"load-from-url"
+					]
+				},
+				"description": "Endpoint de carga de documentos para testing de Semana 2.\n\nInicia el procesamiento asíncrono que incluye:\n- **Descarga de documentos** desde URL proporcionada\n- **Chunking** de documentos en fragmentos manejables\n- **Generación de embeddings** vectoriales\n- **Almacenamiento** en base de datos vectorial (ChromaDB)\n\n**Funcionalidades clave de Semana 2:**\n- Configuración de chunking (tamaño, overlap, estrategia)\n- Procesamiento asíncrono en background\n- Logging de resultados para validación posterior\n\n**Validaciones:**\n- Processing ID generado correctamente\n- Estructura de respuesta válida\n- Timestamp de inicio registrado\n\n**Uso en Semana 2:** Este endpoint debe procesar documentos completamente, incluyendo chunking y embeddings, no solo descarga como en Semana 1."
+			},
+			"response": []
+		},
+		{
+			"name": "3. Validate Load",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Se encontraron los documentos esperados\", function() {\r",
+							"    const responseData = pm.response.json();\r",
+							"    pm.expect(responseData.data.collection_info.documents_found).to.be.equal(responseData.data.collection_info.documents_processed_successfully)\r",
+							"})\r",
+							"\r",
+							"pm.test(\"Se cargaron nuevos chunks en la base de datos\", function() {\r",
+							"    const responseData = pm.response.json();\r",
+							"    pm.expect(responseData.data.collection_info.total_chunks_after).to.be.above(responseData.data.collection_info.total_chunks_before)\r",
+							"})\r",
+							"\r",
+							"pm.test(\"No hubo errores al procesar los documentos\", function() {\r",
+							"    const responseData = pm.response.json();\r",
+							"    pm.expect(responseData.data.failed_documents.length).to.eql(0)\r",
+							"})"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/documents/load-from-url/{{valid_processing_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"documents",
+						"load-from-url",
+						"{{valid_processing_id}}"
+					]
+				},
+				"description": "Validación crítica del procesamiento para Semana 2.\n\nEste endpoint verifica que el procesamiento de documentos se completó exitosamente, específicamente validando:\n\n**Chunking exitoso:**\n- `total_chunks_after > total_chunks_before` (nuevos chunks creados)\n- Documentos procesados sin errores (`failed_documents.length == 0`)\n- Todos los documentos encontrados fueron procesados\n\n**Almacenamiento en base vectorial:**\n- Chunks almacenados correctamente en ChromaDB\n- Embeddings generados y persistidos\n- Metadatos de chunks preservados\n\n**Validaciones específicas de Semana 2:**\n- Verificar que se crearon nuevos chunks en la base de datos\n- Confirmar que no hubo errores en el procesamiento\n- Validar que la colección está lista para consultas RAG\n\n**Importancia:** Sin chunking exitoso, las consultas RAG en Semana 2 no funcionarán correctamente."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Ask Question - Expect answer",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response status code is 200\", function () {",
+							"    pm.expect(pm.response.code).to.equal(200);",
+							"});",
+							"",
+							"",
+							"pm.test(\"Response has the required fields\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData).to.be.an('object');",
+							"    pm.expect(responseData).to.have.all.keys('question', 'final_query', 'answer', 'collection', 'files_consulted', 'context_docs', 'reranker_used', 'query_rewriting_used', 'response_time_sec');",
+							"    pm.environment.set(\"Answer_expected\", responseData.answer);",
+							"    const context = []",
+							"    for (const doc of responseData.context_docs) {",
+							"        context.push(doc.content);",
+							"    }",
+							"    pm.environment.set(\"Context_expected\", JSON.stringify(context));",
+							"});",
+							"",
+							"",
+							"pm.test(\"Response time is less than or equal to 30 seconds\", function () {",
+							"    pm.expect(pm.response.responseTime).to.be.below(30000);",
+							"});",
+							"",
+							"",
+							"pm.test(\"Reranker_used should be a boolean value\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData).to.have.property('reranker_used').that.is.a('boolean');",
+							"});",
+							"",
+							"",
+							"pm.test(\"Files_consulted and context_docs should be arrays\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData.files_consulted).to.be.an('array', \"files_consulted should be an array\");",
+							"    pm.expect(responseData.context_docs).to.be.an('array', \"context_docs should be an array\");",
+							"});",
+							"",
+							"pm.test(\"Se traen al menos dos chunks\", function () {",
+							"    const responseData = pm.response.json();",
+							"    pm.expect(responseData.context_docs.length).to.be.at.least(2);",
+							"});",
+							"",
+							"pm.test(\"Los chunks tienen una longitud de al menos 100 caracteres\", function () {",
+							"    const responseData = pm.response.json();",
+							"    for (const doc of responseData.context_docs) {",
+							"        pm.expect(doc.snippet.length).to.be.at.least(100);",
+							"    }",
+							"});",
+							"",
+							"pm.test(\"La answer no debe venir vacía\", function () {",
+							"    const responseData = pm.response.json();",
+							"    pm.expect(responseData.answer).to.not.equal(\"\");",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"question\": \"{{q_ok_response}}\",\n  \"top_k\": 3,\n  \"collection\": \"{{collection_name}}\"\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/ask",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"ask"
+					]
+				},
+				"description": "Test principal del sistema RAG para Semana 2 - Consulta esperando respuesta.\n\nEste test verifica que el sistema RAG básico funciona correctamente:\n\n**Funcionalidades RAG evaluadas:**\n- **Retrieval**: Recuperación de chunks relevantes desde ChromaDB\n- **Generation**: Generación de respuesta contextualizada\n- **Quality Control**: Validaciones de calidad de respuesta\n\n**Validaciones específicas de Semana 2:**\n- Al menos 2 chunks recuperados (`context_docs.length >= 2`)\n- Chunks con longitud mínima de 100 caracteres\n- Respuesta no vacía (`answer != \"\"`)\n- Estructura de respuesta completa y correcta\n- Tiempo de respuesta aceptable (< 30 segundos)\n\n**Características de Semana 2:**\n- `reranker_used: false` (no implementado aún)\n- `query_rewriting_used: false` (no implementado aún)\n- `final_query == question` (sin reescritura)\n\n**Criterio de éxito:** El sistema debe recuperar chunks relevantes y generar una respuesta coherente basada en el contenido de los documentos cargados."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Ask Question - Do Not Expect answer",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response status code is 200\", function () {",
+							"    pm.expect(pm.response.code).to.equal(200);",
+							"});",
+							"",
+							"",
+							"pm.test(\"Response has the required fields\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData).to.be.an('object');",
+							"    pm.expect(responseData).to.have.all.keys('question', 'final_query', 'answer', 'collection', 'files_consulted', 'context_docs', 'reranker_used', 'query_rewriting_used', 'response_time_sec');",
+							"    ",
+							"    pm.environment.set(\"Answer_not_expected\", responseData.answer);",
+							"    const context = []",
+							"    for (const doc of responseData.context_docs) {",
+							"        context.push(doc.content);",
+							"    }",
+							"    pm.environment.set(\"Context_not_expected\", JSON.stringify(context));",
+							"});",
+							"",
+							"",
+							"pm.test(\"Response time is less than or equal to 30 seconds\", function () {",
+							"    pm.expect(pm.response.responseTime).to.be.below(30000);",
+							"});",
+							"",
+							"pm.test(\"Reranker_used should be a boolean value\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData).to.have.property('reranker_used').that.is.a('boolean');",
+							"});",
+							"",
+							"",
+							"pm.test(\"Files_consulted and context_docs should be arrays\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData.files_consulted).to.be.an('array', \"files_consulted should be an array\");",
+							"    pm.expect(responseData.context_docs).to.be.an('array', \"context_docs should be an array\");",
+							"});",
+							"",
+							"pm.test(\"Se traen al menos dos chunks\", function () {",
+							"    const responseData = pm.response.json();",
+							"    pm.expect(responseData.context_docs.length).to.be.at.least(2);",
+							"});",
+							"",
+							"pm.test(\"Los chunks tienen una longitud de al menos 100 caracteres\", function () {",
+							"    const responseData = pm.response.json();",
+							"    for (const doc of responseData.context_docs) {",
+							"        pm.expect(doc.snippet.length).to.be.at.least(100);",
+							"    }",
+							"});",
+							"",
+							"pm.test(\"La answer no debe venir vacía\", function () {",
+							"    const responseData = pm.response.json();",
+							"    pm.expect(responseData.answer).to.not.equal(\"\");",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"question\": \"{{q_error_response}}\",\r\n  \"top_k\": 3,\r\n  \"collection\": \"{{collection_name}}\",\r\n  \"force_rebuild\": false\r\n}\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/ask",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"ask"
+					]
+				},
+				"description": "Test de robustez del sistema RAG - Consulta que puede no generar respuesta.\n\nEste test evalúa el comportamiento del sistema con consultas que pueden no tener respuesta directa en los documentos:\n\n**Objetivo del test:**\n- Verificar que el sistema maneja consultas sin respuesta clara\n- Validar que la estructura de respuesta se mantiene consistente\n- Confirmar que el sistema sigue recuperando chunks relevantes\n\n**Validaciones consistentes:**\n- Estructura de respuesta correcta (mismos campos que consulta exitosa)\n- Al menos 2 chunks recuperados (proceso de retrieval funciona)\n- Chunks con longitud mínima válida\n- Tiempo de respuesta aceptable\n- Respuesta no vacía (aunque sea indicando falta de información)\n\n**Importancia para Semana 2:**\nEvalúa la robustez del sistema RAG básico cuando el contenido recuperado no es suficiente para generar una respuesta específica, pero el sistema debe seguir funcionando correctamente."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Ask Question - Random question",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response status code is 200\", function () {",
+							"    pm.expect(pm.response.code).to.equal(200);",
+							"});",
+							"",
+							"",
+							"pm.test(\"Response has the required fields\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData).to.be.an('object');",
+							"    pm.expect(responseData).to.have.all.keys('question', 'final_query', 'answer', 'collection', 'files_consulted', 'context_docs', 'reranker_used', 'query_rewriting_used', 'response_time_sec');",
+							"});",
+							"",
+							"",
+							"pm.test(\"Reranker_used should be a boolean value\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData).to.have.property('reranker_used').that.is.a('boolean');",
+							"});",
+							"",
+							"",
+							"pm.test(\"Response time is less than or equal to 30 seconds\", function () {",
+							"    pm.expect(pm.response.responseTime).to.be.below(30000);",
+							"});",
+							"",
+							"",
+							"pm.test(\"Files_consulted and context_docs should be arrays\", function () {",
+							"    const responseData = pm.response.json();",
+							"    ",
+							"    pm.expect(responseData.files_consulted).to.be.an('array', \"files_consulted should be an array\");",
+							"    pm.expect(responseData.context_docs).to.be.an('array', \"context_docs should be an array\");",
+							"});",
+							"",
+							"pm.test(\"Se traen al menos dos chunks\", function () {",
+							"    const responseData = pm.response.json();",
+							"    pm.expect(responseData.context_docs.length).to.be.at.least(2);",
+							"});",
+							"",
+							"pm.test(\"Los chunks tienen una longitud de al menos 100 caracteres\", function () {",
+							"    const responseData = pm.response.json();",
+							"    for (const doc of responseData.context_docs) {",
+							"        pm.expect(doc.snippet.length).to.be.at.least(100);",
+							"    }",
+							"});",
+							"",
+							"pm.test(\"La answer no debe venir vacía\", function () {",
+							"    const responseData = pm.response.json();",
+							"    pm.expect(responseData.answer).to.not.equal(\"\");",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"question\": \"Cuéntame un chiste\",\n  \"top_k\": 3,\n  \"collection\": \"{{collection_name}}\"}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/ask",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"ask"
+					]
+				},
+				"description": "Test de estrés del sistema RAG - Consulta completamente aleatoria.\n\nEste test final evalúa la robustez del sistema con una consulta completamente irrelevante:\n\n**Propósito específico:**\n- Verificar que el sistema no falla con consultas no relacionadas\n- Confirmar que el proceso de retrieval sigue funcionando\n- Validar que se mantiene la estructura de respuesta\n- Probar el manejo de consultas fuera del dominio de los documentos\n\n**Validaciones de robustez:**\n- Sistema no crashea con consultas irrelevantes\n- Estructura JSON consistente y válida\n- Tiempo de respuesta dentro de límites aceptables\n- Recovery graceful cuando no hay contenido relevante\n\n**Ejemplo de consulta:** \"Cuéntame un chiste\" - completamente fuera del contexto de documentos contractuales\n\n**Valor para Semana 2:**\nAsegura que el sistema RAG básico es robusto y puede manejar cualquier tipo de consulta sin fallar, manteniendo una experiencia de usuario consistente."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://0.0.0.0:8000"
+		},
+		{
+			"key": "valid_url",
+			"value": ""
+		},
+		{
+			"key": "collection_name",
+			"value": "test_collection"
+		},
+		{
+			"key": "valid_processing_id",
+			"value": ""
+		},
+		{
+			"key": "body_load",
+			"value": ""
+		},
+		{
+			"key": "q_ok_response",
+			"value": ""
+		},
+		{
+			"key": "q_error_response",
+			"value": ""
+		}
+	]
+}

@@ -1,0 +1,711 @@
+# ===================================================================
+# GITHUB ACTIONS WORKFLOW - SEMANA 1 BACKEND EVALUATION
+# ===================================================================
+# 
+# Este archivo define un pipeline de CI/CD completo para evaluar
+# el backend de la Semana 1. Incluye tests unitarios, de integración
+# y E2E usando Postman Collections.
+#
+# ESTRUCTURA DEL WORKFLOW:
+# 1. SETUP: Verificación del entorno y dependencias
+# 2. TESTS UNITARIOS: Verificación de endpoints individuales
+# 3. TESTS DE INTEGRACIÓN: Verificación del servidor completo
+# 4. TESTS E2E: Pruebas con Postman Collections
+# 5. RESULTADO FINAL: Consolidación de resultados
+#
+# Este archivo es un ejemplo completo de cómo implementar pruebas
+# automatizadas en su proyecto usando GitHub Actions.
+# ===================================================================
+
+name: Semana 1 - Backend Base Evaluation
+
+# ==================== CONFIGURACIÓN DE TRIGGERS ====================
+# Define cuándo se ejecuta este workflow
+on:
+  push:
+    branches: [ main]  # Se ejecuta al hacer push a estas ramas, puedes agregar más ramas si lo deseas
+  pull_request:
+    branches: [ main ]  # Se ejecuta en PR hacia main
+
+jobs:
+  # ================================================================
+  # JOB 1: SETUP - Verificar que el entorno básico funciona
+  # ================================================================
+  # Este job verifica que el proyecto tiene la estructura correcta
+  # y que todas las dependencias se pueden instalar correctamente.
+  # Es un prerequisito para todos los demás jobs.
+  
+  setup-verification:
+    name: "Setup & Dependencies"
+    runs-on: ubuntu-latest  # Usa Ubuntu como sistema operativo
+    steps:
+      # === PASO 1: OBTENER CÓDIGO ===
+      - uses: actions/checkout@v4  # Descarga el código del repositorio
+      
+      # === PASO 2: CONFIGURAR PYTHON ===
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"  # Usa Python 3.12 (versión específica)
+      
+      # === PASO 3: INSTALAR DEPENDENCIAS ===
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip  # Actualizar pip
+          pip install -r requirements.txt      # Instalar dependencias del proyecto
+          pip install pytest pytest-asyncio   # Instalar herramientas de testing
+      
+      # === PASO 4: CONFIGURAR API KEY ===
+      - name: Verify API key exists
+        run: |
+          # Crear archivo de API key desde secretos de GitHub
+          if [ ! -f "apikey.json" ]; then
+            printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          fi
+          echo "✅ API key file created"
+      
+      # === PASO 5: CREAR DIRECTORIOS NECESARIOS ===
+      - name: Create necessary directories
+        run: |
+          mkdir -p docs logs  # Crear directorios para documentos y logs
+          echo "✅ Directory structure created"
+      
+      # === PASO 6: VERIFICAR ESTRUCTURA DEL PROYECTO ===
+      - name: Verify main files exist
+        run: |
+          # Verificar que existen los archivos principales del proyecto
+          test -f main.py && echo "✅ main.py exists" || (echo "❌ main.py missing" && exit 1)
+          test -f requirements.txt && echo "✅ requirements.txt exists" || (echo "❌ requirements.txt missing" && exit 1)
+          test -d app/ && echo "✅ app/ directory exists" || (echo "❌ app/ directory missing" && exit 1)
+
+  # ================================================================
+  # JOB 2-3: TESTS UNITARIOS - Verificar que los endpoints existen
+  # ================================================================
+  # Estos jobs ejecutan tests unitarios que verifican que los endpoints
+  # están implementados correctamente sin necesidad de levantar el servidor.
+  # Usan pytest para ejecutar los tests definidos en tests/semana1/
+  
+  unit-health-check:
+    name: "Health Check (Unit Test)"
+    runs-on: ubuntu-latest
+    needs: setup-verification  # Espera a que termine el job de setup
+    steps:
+      # === CONFIGURACIÓN BÁSICA ===
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      # === INSTALACIÓN DE DEPENDENCIAS ===
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      
+      # === PREPARACIÓN DEL ENTORNO ===
+      - name: Create directories
+        run: mkdir -p docs logs
+      
+      # === EJECUCIÓN DE TESTS ===
+      - name: Run Health Check Unit Tests
+        run: |
+          echo "Running health check unit tests..."
+          # Ejecuta tests específicos del health check con verbose output
+          pytest tests/semana1/test_health_check.py -v --tb=short
+          echo "✅ Health check tests passed"
+  
+  unit-endpoints-basic:
+    name: "Endpoints Existence (Unit Test)" 
+    runs-on: ubuntu-latest
+    needs: setup-verification  # Ejecuta en paralelo con health-check
+    steps:
+      # === CONFIGURACIÓN BÁSICA ===
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      # === INSTALACIÓN DE DEPENDENCIAS ===
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      
+      # === PREPARACIÓN DE DATOS DE TEST ===
+      - name: Create test data for validation endpoint
+        run: |
+          mkdir -p docs logs
+          # Crear archivo JSON de prueba para el endpoint de validación
+          echo '{"success": true, "message": "Test data for week 1", "data": {"processing_summary": {}, "collection_info": {"name": "test_collection", "documents_found": 1, "documents_processed_successfully": 1, "documents_failed": 0, "total_chunks_before": 0, "total_chunks_after": 0, "storage_size_mb": 0}, "documents_processed": [], "failed_documents": [], "chunking_statistics": {}, "embedding_statistics": {}, "warnings": [], "processing_id": "test-id", "timestamp": "2024-01-01T00:00:00"}}' > logs/test-id.json
+      
+      # === EJECUCIÓN DE TESTS ===
+      - name: Run Endpoints Basic Unit Tests
+        run: |
+          echo "Running endpoints basic unit tests..."
+          # Ejecuta tests que verifican que todos los endpoints existen
+          pytest tests/semana1/test_endpoints_basic.py -v --tb=short
+          echo "✅ Endpoints basic tests passed"
+
+  # ================================================================
+  # JOB 4-7: TESTS DE INTEGRACIÓN - Verificar que el servidor funciona
+  # ================================================================
+  # Estos jobs levantan el servidor FastAPI real y hacen peticiones HTTP
+  # para verificar que todo funciona correctamente en un entorno real.
+  # Son más lentos que los unitarios pero más realistas.
+
+  integration-server-health:
+    name: "Server Health (Integration)"
+    runs-on: ubuntu-latest
+    needs: [unit-health-check, unit-endpoints-basic]  # Espera a que terminen los unitarios
+    steps:
+      # === CONFIGURACIÓN BÁSICA ===
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      # === PREPARACIÓN DEL ENTORNO ===
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json  # Crear API key
+          mkdir -p docs logs
+      
+      # === INICIO DEL SERVIDOR Y PRUEBAS ===
+      - name: Start server and test health
+        run: |
+          # Iniciar servidor en background con uvicorn
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # === VERIFICAR RESPUESTA DEL HEALTH CHECK ===
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health response: $HEALTH_RESPONSE"
+          
+          # Verificar que la respuesta contiene los campos esperados
+          echo "$HEALTH_RESPONSE" | jq -e '.success' > /dev/null || (echo "❌ Missing 'success' field" && exit 1)
+          echo "$HEALTH_RESPONSE" | jq -e '.status' > /dev/null || (echo "❌ Missing 'status' field" && exit 1)
+          echo "$HEALTH_RESPONSE" | jq -e '.timestamp' > /dev/null || (echo "❌ Missing 'timestamp' field" && exit 1)
+          
+          # Verificar que success es true
+          SUCCESS=$(echo "$HEALTH_RESPONSE" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "❌ Health check success should be true, got: $SUCCESS"
+            exit 1
+          fi
+          
+          echo "✅ Health endpoint working correctly"
+
+  integration-document-load:
+    name: "Document Load Endpoint (Integration)"
+    runs-on: ubuntu-latest
+    needs: [unit-health-check, unit-endpoints-basic]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      - name: Start server and test document loading
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          echo "Testing document load endpoint..."
+          
+          # Debug: Show the request being sent
+          echo "Request body: {\"source_url\": \"${{ secrets.BASE_URL }}\", \"collection_name\": \"test_collection\", \"chunking_config\": {\"chunk_size\": 1000, \"chunk_overlap\": 200, \"chunking_strategy\": \"recursive_character\"}}"
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"source_url": "${{ secrets.BASE_URL }}", "collection_name": "test_collection", "chunking_config": {"chunk_size": 1000, "chunk_overlap": 200, "chunking_strategy": "recursive_character"}}' \
+            http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+          
+          echo "Raw RESPONSE: '$RESPONSE'"
+          
+          if [[ -z "$RESPONSE" ]]; then
+            echo "❌ Empty response from curl command"
+            exit 1
+          fi
+          
+          if [[ ${#RESPONSE} -lt 3 ]]; then
+            echo "❌ Response too short to contain HTTP code: '$RESPONSE'"
+            exit 1
+          fi
+          
+          HTTP_CODE=${RESPONSE: -3}
+          RESPONSE_BODY=${RESPONSE%???}
+          
+          echo "HTTP Code: '$HTTP_CODE'"
+          echo "Response Body: '$RESPONSE_BODY'"
+          
+          # Check if HTTP_CODE is actually a number
+          if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
+            echo "❌ HTTP_CODE is not a number: '$HTTP_CODE'"
+            echo "Full response was: '$RESPONSE'"
+            exit 1
+          fi
+          
+          # Debug: Check if response is valid JSON
+          if [[ -n "$RESPONSE_BODY" ]]; then
+            echo "$RESPONSE_BODY" | jq . > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+              echo "❌ Response is not valid JSON"
+              echo "Raw response: $RESPONSE"
+              exit 1
+            fi
+          fi
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Expected HTTP 200, got $HTTP_CODE"
+            exit 1
+          fi
+          
+          # Verify response contains processing_id
+          PROCESSING_ID=$(echo "$RESPONSE_BODY" | jq -r '.processing_id')
+          if [[ "$PROCESSING_ID" == "null" || -z "$PROCESSING_ID" ]]; then
+            echo "❌ Response should contain processing_id"
+            exit 1
+          fi
+          
+          echo "✅ Document load endpoint working, processing_id: $PROCESSING_ID"
+          
+          # Wait a bit and check if collection directory is created
+          echo "Waiting for document processing to start..."
+          sleep 15
+          
+          if [ -d "docs/test_collection" ]; then
+            FILE_COUNT=$(find docs/test_collection -type f | wc -l)
+            echo "Collection directory created with $FILE_COUNT files"
+            echo "✅ Document loading process initiated successfully"
+          else
+            echo "⚠️ Collection directory not yet created (processing might be async)"
+            echo "Expected directory: docs/test_collection"
+            echo "Existing directories in docs/:"
+            ls -la docs/ || echo "docs/ directory doesn't exist"
+          fi
+
+  integration-validation:
+    name: "Validation Endpoint (Integration)"
+    runs-on: ubuntu-latest
+    needs: [integration-document-load]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      - name: Start server and test validation
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          echo "Creating a real processing job and validating it..."
+          # First, create a real processing job
+          LOAD_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"source_url": "${{ secrets.BASE_URL }}", "collection_name": "validation_test", "chunking_config": {"chunk_size": 1000, "chunk_overlap": 200, "chunking_strategy": "recursive_character"}}' \
+            http://localhost:8000/api/v1/documents/load-from-url 2>&1)
+          
+          echo "Load response: '$LOAD_RESPONSE'"
+          
+          if [[ -z "$LOAD_RESPONSE" ]]; then
+            echo "❌ Empty response from load document curl command"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          echo "$LOAD_RESPONSE" | jq . > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Load response is not valid JSON: '$LOAD_RESPONSE'"
+            exit 1
+          fi
+          
+          PROCESSING_ID=$(echo "$LOAD_RESPONSE" | jq -r '.processing_id')
+          echo "Created processing job: $PROCESSING_ID"
+          
+          if [[ "$PROCESSING_ID" == "null" || -z "$PROCESSING_ID" ]]; then
+            echo "❌ Failed to get processing_id from load response"
+            exit 1
+          fi
+          
+          # Wait for processing to start (give it time to create the log file)
+          echo "Waiting for processing to create log file..."
+          for i in {1..30}; do
+            if [ -f "logs/${PROCESSING_ID}.json" ]; then
+              echo "✅ Log file created after ${i} seconds"
+              break
+            fi
+            echo "Waiting for log file... attempt $i/30"
+            sleep 2
+          done
+          
+          # Now test validation
+          echo "Testing validation endpoint with real processing_id: $PROCESSING_ID"
+          VALIDATION_RESPONSE=$(curl -s -w "%{http_code}" http://localhost:8000/api/v1/documents/load-from-url/$PROCESSING_ID 2>&1)
+          
+          echo "Raw validation response: '$VALIDATION_RESPONSE'"
+          
+          if [[ -z "$VALIDATION_RESPONSE" ]]; then
+            echo "❌ Empty response from validation curl command"
+            exit 1
+          fi
+          
+          if [[ ${#VALIDATION_RESPONSE} -lt 3 ]]; then
+            echo "❌ Validation response too short to contain HTTP code: '$VALIDATION_RESPONSE'"
+            exit 1
+          fi
+          
+          HTTP_CODE=${VALIDATION_RESPONSE: -3}
+          RESPONSE_BODY=${VALIDATION_RESPONSE%???}
+          
+          echo "HTTP Code: '$HTTP_CODE'"
+          echo "Response Body: '$RESPONSE_BODY'"
+          
+          # Check if HTTP_CODE is actually a number
+          if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
+            echo "❌ HTTP_CODE is not a number: '$HTTP_CODE'"
+            echo "Full response was: '$VALIDATION_RESPONSE'"
+            exit 1
+          fi
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Expected HTTP 200, got $HTTP_CODE"
+            echo "Debug: Checking logs directory..."
+            ls -la logs/
+            exit 1
+          fi
+          
+          # Verify response has expected structure
+          SUCCESS=$(echo "$RESPONSE_BODY" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ] && [ "$SUCCESS" != "false" ]; then
+            echo "❌ Validation response should have success field"
+            exit 1
+          fi
+          
+          echo "✅ Validation endpoint working correctly"
+          
+          # Test with non-existent ID (should return 404)
+          echo "Testing validation with non-existent ID..."
+          NOT_FOUND_RESPONSE=$(curl -s -w "%{http_code}" http://localhost:8000/api/v1/documents/load-from-url/nonexistent-id 2>&1)
+          
+          echo "404 test response: '$NOT_FOUND_RESPONSE'"
+          
+          if [[ -z "$NOT_FOUND_RESPONSE" ]]; then
+            echo "⚠️ Empty response from 404 test curl command"
+          elif [[ ${#NOT_FOUND_RESPONSE} -lt 3 ]]; then
+            echo "⚠️ 404 test response too short: '$NOT_FOUND_RESPONSE'"
+          else
+            NOT_FOUND_CODE=${NOT_FOUND_RESPONSE: -3}
+            
+            if ! [[ "$NOT_FOUND_CODE" =~ ^[0-9]+$ ]]; then
+              echo "⚠️ 404 test HTTP_CODE is not a number: '$NOT_FOUND_CODE'"
+            elif [ "$NOT_FOUND_CODE" != "404" ]; then
+              echo "⚠️ Expected HTTP 404 for non-existent ID, got $NOT_FOUND_CODE"
+            else
+              echo "✅ Validation correctly returns 404 for non-existent IDs"
+            fi
+          fi
+
+  integration-ask-question:
+    name: "Ask Question Endpoint (Integration)"
+    runs-on: ubuntu-latest
+    needs: [unit-health-check, unit-endpoints-basic]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+      - name: Create minimal collection for ask endpoint
+        run: |
+          # Create a test collection so ask endpoint doesn't fail
+          mkdir -p docs/test_collection
+          echo "Documento de prueba para semana 1" > docs/test_collection/test_doc.txt
+      - name: Start server and test ask functionality
+        run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+          
+          # Test health endpoint to confirm server is working
+          HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+          echo "Health check response: $HEALTH_RESPONSE"
+          
+          echo "Testing ask question endpoint..."
+          
+          # Debug: Show the request being sent
+          echo "Request body: {\"question\": \"¿Qué información hay disponible?\"}"
+          
+          ASK_RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"question": "¿Qué información hay disponible?"}' \
+            http://localhost:8000/api/v1/ask 2>&1)
+          
+          echo "Raw ASK_RESPONSE: '$ASK_RESPONSE'"
+          
+          if [[ -z "$ASK_RESPONSE" ]]; then
+            echo "❌ Empty response from curl command"
+            exit 1
+          fi
+          
+          if [[ ${#ASK_RESPONSE} -lt 3 ]]; then
+            echo "❌ Response too short to contain HTTP code: '$ASK_RESPONSE'"
+            exit 1
+          fi
+          
+          HTTP_CODE=${ASK_RESPONSE: -3}
+          RESPONSE_BODY=${ASK_RESPONSE%???}
+          
+          echo "HTTP Code: '$HTTP_CODE'"
+          echo "Response Body: '$RESPONSE_BODY'"
+          
+          # Check if HTTP_CODE is actually a number
+          if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
+            echo "❌ HTTP_CODE is not a number: '$HTTP_CODE'"
+            echo "Full response was: '$ASK_RESPONSE'"
+            exit 1
+          fi
+          
+          # Debug: Check if response is valid JSON
+          if [[ -n "$RESPONSE_BODY" ]]; then
+            echo "$RESPONSE_BODY" | jq . > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+              echo "❌ Response is not valid JSON"
+              echo "Raw response: $ASK_RESPONSE"
+              exit 1
+            fi
+          fi
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Expected HTTP 200, got $HTTP_CODE"
+            exit 1
+          fi
+          
+          # Verify response has expected structure (even if RAG logic is not implemented)
+          QUESTION=$(echo "$RESPONSE_BODY" | jq -r '.question')
+          ANSWER=$(echo "$RESPONSE_BODY" | jq -r '.answer')
+          RERANKER_USED=$(echo "$RESPONSE_BODY" | jq -r '.reranker_used')
+          FINAL_QUERY=$(echo "$RESPONSE_BODY" | jq -r '.final_query')
+          QUERY_REWRITING_USED=$(echo "$RESPONSE_BODY" | jq -r '.query_rewriting_used')
+          
+          if [[ "$QUESTION" == "null" || "$ANSWER" == "null" ]]; then
+            echo "❌ Response missing required fields (question, answer)"
+            exit 1
+          fi
+          
+          if [[ "$RERANKER_USED" == "null" ]]; then
+            echo "❌ Response missing reranker_used field"
+            exit 1
+          fi
+          
+          if [[ "$FINAL_QUERY" == "null" ]]; then
+            echo "❌ Response missing final_query field"
+            exit 1
+          fi
+          
+          if [[ "$QUERY_REWRITING_USED" == "null" ]]; then
+            echo "❌ Response missing query_rewriting_used field"
+            exit 1
+          fi
+          
+          # For Semana 1, verify that advanced features are disabled
+          if [[ "$QUERY_REWRITING_USED" != "false" ]]; then
+            echo "❌ query_rewriting_used should be false in Semana 1, got: $QUERY_REWRITING_USED"
+            exit 1
+          fi
+          
+          if [[ "$FINAL_QUERY" != "$QUESTION" ]]; then
+            echo "❌ final_query should equal question in Semana 1"
+            echo "   Question: $QUESTION"
+            echo "   Final Query: $FINAL_QUERY"
+            exit 1
+          fi
+          
+          echo "✅ Ask endpoint working (question: '$QUESTION')"
+          echo "Response: '$ANSWER' (RAG logic not expected in week 1)"
+          
+          # Test error cases
+          echo "Testing ask endpoint with empty question..."
+          ERROR_RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"question": ""}' \
+            http://localhost:8000/api/v1/ask)
+          
+          ERROR_CODE=${ERROR_RESPONSE: -3}
+          if [ "$ERROR_CODE" == "400" ]; then
+            echo "✅ Ask endpoint correctly rejects empty questions"
+          else
+            echo "⚠️ Ask endpoint should reject empty questions with 400, got $ERROR_CODE"
+          fi
+
+  # ================================================================
+  # JOB 8: TESTS E2E - Postman Collection Tests
+  # ================================================================
+  # Este es el job más importante para los estudiantes. Ejecuta las
+  # colecciones de Postman usando Newman (CLI de Postman) para hacer
+  # pruebas end-to-end completas del sistema.
+  #
+  # IMPORTANTE PARA ESTUDIANTES:
+  # - Este job muestra cómo ejecutar colecciones de Postman en GitHub Actions
+  # - Usa Newman (herramienta CLI de Postman) para automatizar las pruebas
+  # - Pueden usar este patrón para sus propias colecciones de Postman
+  # - Las variables de entorno se pasan desde GitHub Secrets
+
+  e2e-postman-tests:
+    name: "Complete API Testing (Postman E2E)"
+    runs-on: ubuntu-latest
+    needs: [integration-server-health, integration-document-load, integration-validation, integration-ask-question]
+    steps:
+      # === CONFIGURACIÓN BÁSICA ===
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      # === PREPARACIÓN DEL ENTORNO ===
+      - run: |
+          pip install -r requirements.txt
+          printf "%s" '${{ secrets.DRIVEKEY }}' > apikey.json
+          mkdir -p docs logs
+          # Crear datos de prueba para los tests de Postman
+          echo '{"success": true, "message": "Postman test data", "data": {"processing_summary": {}, "collection_info": {"name": "test_collection", "documents_found": 1, "documents_processed_successfully": 1, "documents_failed": 0, "total_chunks_before": 0, "total_chunks_after": 0, "storage_size_mb": 0}, "documents_processed": [], "failed_documents": [], "chunking_statistics": {}, "embedding_statistics": {}, "warnings": [], "processing_id": "test-postman-id", "timestamp": "2024-01-01T00:00:00"}}' > logs/test-postman-id.json
+      
+      # === INICIO DEL SERVIDOR ===
+      - run: |
+          chmod +x run_server.sh
+          ./run_server.sh
+      
+      # === INSTALACIÓN DE NEWMAN ===
+      - run: npm install -g newman  # Instalar Newman (CLI de Postman)
+      
+      # === EJECUCIÓN DE COLECCIÓN DE POSTMAN ===
+      - name: Run Postman Collection
+        run: |
+          echo "🔮 Running Postman E2E tests..."
+          # Ejecutar colección de Postman con Newman
+          # Pasar variable desde secretos, salida con colores, reportes en CLI y JSON
+          newman run postman_tests/MISW-4411-API-Proyecto.postman_collection.json \
+            --env-var "test_source_url=${{ secrets.BASE_URL }}" \
+            --color on \
+            --reporters cli,json \
+            --reporter-json-export postman-results.json
+      
+      # === ANÁLISIS DE RESULTADOS ===
+      - name: Analyze Postman Results
+        if: always()  # Ejecutar siempre, incluso si fallan los tests
+        run: |
+          if [ -f postman-results.json ]; then
+            # Extraer estadísticas de los resultados
+            TOTAL_TESTS=$(jq '.run.stats.assertions.total' postman-results.json)
+            FAILED_TESTS=$(jq '.run.stats.assertions.failed' postman-results.json)
+            
+            echo "Postman Results: $FAILED_TESTS failed out of $TOTAL_TESTS total assertions"
+            
+            if [ "$FAILED_TESTS" -eq 0 ]; then
+              echo "✅ All Postman tests passed"
+            else
+              echo "⚠️ Some Postman tests failed (expected for week 1 baseline)"
+              echo "Failed test details:"
+              # Mostrar detalles de los tests que fallaron
+              jq -r '.run.executions[] | select(.assertions | map(select(.error)) | length > 0) | .item.name + ": " + (.assertions[] | select(.error) | .error.message)' postman-results.json | head -10
+            fi
+          else
+            echo "⚠️ Postman results file not found"
+          fi
+
+  # ================================================================
+  # JOB 9: RESULTADO FINAL - Consolidación de resultados
+  # ================================================================
+  # Este job se ejecuta siempre (even if previous jobs fail) y
+  # consolida los resultados de todos los jobs para dar un veredicto final.
+  # Es útil para tener una vista general del estado del pipeline.
+
+  final-status:
+    name: "Final Status"
+    runs-on: ubuntu-latest
+    needs: [setup-verification, unit-health-check, unit-endpoints-basic, integration-server-health, integration-document-load, integration-validation, integration-ask-question, e2e-postman-tests]
+    if: always()  # Ejecutar siempre, independientemente del resultado de otros jobs
+    steps:
+      - name: Check results
+        run: |
+          # === CONTEO DE FALLOS ===
+          FAILURES=0
+          # Verificar el resultado de cada job crítico
+          if [[ "${{ needs.setup-verification.result }}" != "success" ]]; then ((FAILURES++)); fi
+          if [[ "${{ needs.unit-health-check.result }}" != "success" ]]; then ((FAILURES++)); fi
+          if [[ "${{ needs.unit-endpoints-basic.result }}" != "success" ]]; then ((FAILURES++)); fi
+          if [[ "${{ needs.integration-server-health.result }}" != "success" ]]; then ((FAILURES++)); fi
+          if [[ "${{ needs.integration-document-load.result }}" != "success" ]]; then ((FAILURES++)); fi
+          if [[ "${{ needs.integration-validation.result }}" != "success" ]]; then ((FAILURES++)); fi
+          if [[ "${{ needs.integration-ask-question.result }}" != "success" ]]; then ((FAILURES++)); fi
+          
+          echo "Critical failures: $FAILURES"
+          
+          # === VEREDICTO FINAL ===
+          if [ $FAILURES -eq 0 ]; then
+            echo "✅ All tests passed - Backend ready for development"
+            exit 0
+          else
+            echo "❌ $FAILURES critical tests failed"
+            exit 1
+          fi
+
+# ===================================================================
+# CÓMO USAR ESTE WORKFLOW
+# ===================================================================
+#
+# Este workflow es un ejemplo completo de CI/CD para APIs FastAPI.
+# Aquí se exponen los puntos clave para implementar futuras pruebas en el proyecto del curso:
+#
+# 1. ESTRUCTURA BÁSICA:
+#    - setup-verification: Verifica entorno y dependencias
+#    - unit-*: Tests unitarios con pytest
+#    - integration-*: Tests con servidor real
+#    - e2e-*: Tests end-to-end con Postman/Newman
+#    - final-status: Consolidación de resultados
+#
+# 2. PARA USAR CON TUS PROPIAS COLECCIONES DE POSTMAN:
+#    - Coloca tu colección en postman_tests/
+#    - Usa el patrón del job e2e-postman-tests
+#    - Pasa variables con --env-var "variable=${{ secrets.SECRET }}"
+#    - Usa --reporter-json-export para análisis de resultados
+#
+# 3. SECRETOS DE GITHUB:
+#    - DRIVEKEY: API key para Google Drive
+#    - BASE_URL: URL base para las pruebas
+#    - Configúralos en Settings > Secrets and variables > Actions
+#
+# 4. TRIGGERS:
+#    - Se ejecuta en push a main
+#    - Se ejecuta en pull requests a main
+#    - Puedes agregar más ramas o eventos según necesites
+#
+# 5. DEPENDENCIAS ENTRE JOBS:
+#    - Usa 'needs:' para definir el orden de ejecución
+#    - Los jobs sin 'needs:' se ejecutan en paralelo
+#    - Usa 'if: always()' para jobs que deben ejecutarse siempre
+#
+# 6. HERRAMIENTAS UTILIZADAS:
+#    - pytest: Para tests unitarios
+#    - uvicorn: Para levantar el servidor FastAPI
+#    - curl: Para hacer peticiones HTTP
+#    - jq: Para procesar JSON
+#    - newman: Para ejecutar colecciones de Postman
+#
+# ===================================================================

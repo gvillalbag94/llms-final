@@ -1,0 +1,237 @@
+name: package-changelog
+version: 1.0.0
+description: |
+  Servidor MCP que proporciona herramientas para consultar changelogs y breaking changes
+  de paquetes Python publicados en PyPI. Permite obtener información actualizada sobre
+  cambios entre versiones específicas, incluyendo breaking changes, nuevas características,
+  bug fixes, deprecations y guías de migración.
+
+# Información del servidor
+server:
+  name: package-changelog-server
+  version: 1.0.0
+  description: |
+    Servidor MCP que expone herramientas para consultar información de changelogs
+    de paquetes Python desde PyPI API y repositorios GitHub.
+
+# Herramientas disponibles
+tools:
+  - name: get_package_changelog
+    description: |
+      Obtiene el changelog y breaking changes entre dos versiones específicas de un paquete Python.
+      Esta herramienta consulta PyPI API y repositorios (GitHub) para obtener información sobre
+      cambios, breaking changes, nuevas características y guías de migración entre versiones.
+      
+      La herramienta proporciona:
+      - Información sobre breaking changes entre las versiones especificadas
+      - Fechas de publicación de las versiones
+      - Release notes desde GitHub cuando están disponibles
+      - Advertencias sobre versiones intermedias que deben revisarse
+      - Enlaces a recursos oficiales (documentación, homepage, migration guides)
+      - Información sobre nuevas características, bug fixes y deprecations
+    
+    # Esquema de parámetros de entrada (requestSchema)
+    inputSchema:
+      type: object
+      properties:
+        package_name:
+          type: string
+          description: |
+            Nombre del paquete Python publicado en PyPI.
+            Ejemplos: "Django", "requests", "flask", "numpy"
+          examples:
+            - "Django"
+            - "requests"
+            - "flask"
+            - "numpy"
+          required: true
+        
+        from_version:
+          type: string
+          description: |
+            Versión actual del paquete desde la cual se quiere actualizar.
+            Debe ser una versión exacta publicada en PyPI (ej: "4.2", "2.28.0", "2.3.0").
+            Nota: Se recomienda usar versiones completas (ej: "2.3.0" en lugar de "2.3").
+          examples:
+            - "4.2"
+            - "2.28.0"
+            - "2.3.0"
+          required: true
+        
+        to_version:
+          type: string
+          description: |
+            Versión objetivo a la que se quiere actualizar.
+            Debe ser una versión exacta publicada en PyPI (ej: "5.0", "2.31.0", "3.0.0").
+            Nota: Se recomienda usar versiones completas (ej: "3.0.0" en lugar de "3.0").
+          examples:
+            - "5.0"
+            - "2.31.0"
+            - "3.0.0"
+          required: true
+        
+        ecosystem:
+          type: string
+          description: |
+            Ecosistema del paquete. Actualmente solo se soporta "pypi" (Python Package Index).
+            Valores futuros podrían incluir: "npm", "maven", "nuget", etc.
+          enum:
+            - "pypi"
+          default: "pypi"
+          required: false
+      
+      required:
+        - package_name
+        - from_version
+        - to_version
+    
+    # Esquema de respuesta (responseSchema)
+    outputSchema:
+      type: object
+      description: |
+        Respuesta estructurada con información del changelog entre las versiones especificadas.
+      properties:
+        changelog_text:
+          type: string
+          description: |
+            Texto estructurado con información completa del changelog. Incluye:
+            - Título con el rango de versiones
+            - Fechas de publicación de ambas versiones
+            - Release notes desde GitHub (si están disponibles)
+            - Advertencias sobre versiones intermedias
+            - Enlaces a recursos oficiales
+            - Información sobre breaking changes, nuevas características, bug fixes y deprecations
+          example: |
+            Changelog: Django 4.2 → 5.0
+            ============================================================
+            Versión origen (4.2): Publicada el 2023-04-03
+            Versión destino (5.0): Publicada el 2023-12-04
+            
+            Release Notes:
+            [Información detallada de release notes desde GitHub si está disponible]
+            
+            Nota: Hay 29 versión(es) intermedia(s) entre 4.2 y 5.0.
+            Se recomienda revisar los changelogs de cada versión intermedia.
+            
+            Recursos adicionales:
+              - Homepage: https://www.djangoproject.com/
+              - Documentación: https://docs.djangoproject.com/
+              - Migration Guide: [URL si está disponible]
+        
+        error:
+          type: string
+          description: |
+            Mensaje de error si la operación falla. Puede ocurrir cuando:
+            - El paquete no existe en PyPI
+            - Las versiones especificadas no existen
+            - El ecosistema no es soportado
+            - Hay problemas de conectividad con las APIs externas
+          example: "Error: La versión '2.3' no se encontró en PyPI para el paquete 'Flask'."
+
+    
+    # Ejemplos de uso
+    examples:
+      - name: "Consulta de breaking changes entre Django 4.2 y 5.0"
+        input:
+          package_name: "Django"
+          from_version: "4.2"
+          to_version: "5.0"
+          ecosystem: "pypi"
+        output: |
+          📦 Changelog: Django 4.2 → 5.0
+          ============================================================
+          Versión origen (4.2): Publicada el 2023-04-03
+          Versión destino (5.0): Publicada el 2023-12-04
+          
+          ⚠️  Nota: Hay 29 versión(es) intermedia(s) entre 4.2 y 5.0.
+          Se recomienda revisar los changelogs de cada versión intermedia.
+      
+      - name: "Consulta de cambios de seguridad en requests"
+        input:
+          package_name: "requests"
+          from_version: "2.28.0"
+          to_version: "2.31.0"
+          ecosystem: "pypi"
+        output: |
+          📦 Changelog: requests 2.28.0 → 2.31.0
+          ============================================================
+          Versión origen (2.28.0): Publicada el 2022-06-07
+          Versión destino (2.31.0): Publicada el 2023-08-10
+          
+          📝 Release Notes:
+          [Información sobre CVE-2023-32681 y vulnerabilidades de seguridad]
+      
+      - name: "Error: versión no encontrada"
+        input:
+          package_name: "Flask"
+          from_version: "2.3"
+          to_version: "3.0"
+          ecosystem: "pypi"
+        output: |
+          Error: La versión '2.3' no se encontró en PyPI para el paquete 'Flask'.
+          Sugerencia: Usa una versión exacta como "2.3.0", "2.3.1", etc.
+
+  - name: get_package_info
+    description: |
+      Obtiene información general sobre un paquete Python, incluyendo versiones disponibles,
+      descripción, enlaces útiles y metadata del paquete.
+    
+    inputSchema:
+      type: object
+      properties:
+        package_name:
+          type: string
+          description: |
+            Nombre del paquete Python publicado en PyPI.
+          examples:
+            - "Django"
+            - "requests"
+            - "flask"
+          required: true
+        
+        ecosystem:
+          type: string
+          description: |
+            Ecosistema del paquete. Actualmente solo se soporta "pypi".
+          enum:
+            - "pypi"
+          default: "pypi"
+          required: false
+      
+      required:
+        - package_name
+    
+    outputSchema:
+      type: object
+      description: |
+        Información general del paquete incluyendo versiones, descripción y enlaces.
+      properties:
+        info_text:
+          type: string
+          description: |
+            Texto estructurado con información general del paquete.
+          example: |
+            📦 Información del paquete: Django
+            ============================================================
+            Descripción: A high-level Python web framework...
+            Versión más reciente: 5.0
+            Total de versiones: 45
+            Homepage: https://www.djangoproject.com/
+            Documentación: https://docs.djangoproject.com/
+
+# Configuración del servidor
+server_config:
+  transport: stdio
+  capabilities:
+    - tools
+  metadata:
+    author: "Grupo 21 - MISW4411"
+
+# Notas importantes
+notes: |
+  IMPORTANTE:
+  - Las versiones deben ser exactas y existir en PyPI
+  - Se recomienda usar versiones completas (ej: "2.3.0" en lugar de "2.3")
+  - La herramienta requiere conexión a Internet para consultar PyPI y GitHub APIs
+  - Los release notes desde GitHub solo están disponibles si el repositorio tiene releases públicos
+  - La información de breaking changes se obtiene de release notes, no se analiza automáticamente

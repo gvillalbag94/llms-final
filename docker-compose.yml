@@ -1,0 +1,67 @@
+services:
+  # Backend Principal (RAG)
+  rag-backend:
+    container_name: rag-backend
+    build:
+      context: ./202515-MISW4411-Backend-Grupo21
+      dockerfile: Dockerfile
+    # env_file opcional - descomentar si tienes un archivo .env
+    env_file:
+      - ./202515-MISW4411-Backend-Grupo21/.env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - misw-network
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Agent Backend
+  agent-backend:
+    container_name: agent-backend
+    build:
+      context: ./202515-MISW4411-Agent-Backend-Grupo21/app
+      dockerfile: Dockerfile
+    # env_file opcional - descomentar si tienes un archivo .env
+    env_file:
+      - ./202515-MISW4411-Agent-Backend-Grupo21/app/.env
+    environment:
+      # Usar el nombre del servicio para conectarse al RAG backend
+      - RAG_BASE_URL=http://rag-backend:8000
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/keys/apikey.json
+    volumes:
+      # Montar el archivo de credenciales de servicio dentro del contenedor
+      - /Users/felipev9/Documents/andes/final/apikey.json:/app/keys/apikey.json:ro
+    ports:
+      - "8001:8000"
+    depends_on:
+      rag-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - misw-network
+
+  # Frontend
+  frontend:
+    container_name: frontend
+    build:
+      context: ./MISW4411-Agent-FrontEnd
+      dockerfile: Dockerfile
+      args:
+        # URL del backend desde el navegador del usuario
+        - VITE_BACKEND_URL=http://localhost:8001
+    ports:
+      - "3000:80"
+    depends_on:
+      - agent-backend
+    restart: unless-stopped
+    networks:
+      - misw-network
+
+networks:
+  misw-network:
+    driver: bridge

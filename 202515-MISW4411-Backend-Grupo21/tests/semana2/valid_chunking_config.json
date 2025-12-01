@@ -1,0 +1,56 @@
+[
+    {
+        "source_url": "{{valid_url}}",
+        "collection_name": "{{collection_name}}",
+        "chunking_config": {
+            "chunk_size": 1000,
+            "chunk_overlap": 200,
+            "chunking_strategy": "semantic"
+        },
+        "processing_options": {
+            "max_file_size_mb": 50,
+            "timeout_per_file_seconds": 300
+        },
+        "embedding_config": {
+            "model": "embedding-001",
+            "batch_size": 90,
+            "retry_attempts": 3
+        }
+    },
+    {
+        "source_url": "{{valid_url}}",
+        "collection_name": "{{collection_name}}",
+        "chunking_config": {
+            "chunking_strategy": "fixed_size",
+            "chunk_size": 400,
+            "chunk_overlap": 50
+        },
+        "processing_options": {
+            "max_file_size_mb": 50,
+            "timeout_per_file_seconds": 300
+        },
+        "embedding_config": {
+            "model": "embedding-001",
+            "batch_size": 90,
+            "retry_attempts": 3
+        }
+    },
+    {
+        "source_url": "{{valid_url}}",
+        "collection_name": "{{collection_name}}",
+        "chunking_config": {
+            "chunking_strategy": "document_structure",
+            "chunk_size": 800,
+            "chunk_overlap": 100
+        },
+        "processing_options": {
+            "max_file_size_mb": 50,
+            "timeout_per_file_seconds": 300
+        },
+        "embedding_config": {
+            "model": "embedding-001",
+            "batch_size": 90,
+            "retry_attempts": 3
+        }
+    }
+]
