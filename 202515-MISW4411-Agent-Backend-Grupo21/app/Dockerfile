@@ -1,6 +1,13 @@
 # Use official lightweight Python 3.11-slim image
 FROM python:3.11-slim
 
+# Install system dependencies needed for ML libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -12,13 +19,15 @@ ENV LC_ALL=C.UTF-8
 # Create and set working directory
 WORKDIR /app
 
-# Copy requirements
+# Copy requirements first for better Docker layer caching
 COPY requirements.txt .
 
-# Install requirements
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and install requirements in one layer
+# Using --no-cache-dir to reduce image size
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy all the code
+# Copy application code (this layer will be rebuilt only when code changes)
 COPY . .
 
 # Expose the port where FastAPI will run
