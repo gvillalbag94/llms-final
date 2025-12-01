@@ -60,12 +60,14 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8080",
     "http://34.63.36.192",
     "http://34.63.36.192:80",
+    "http://136.114.46.3:3000",
+    "http://186.87.10.33:3000",
 ]
 
 # Permitir todos los orígenes en desarrollo (para testing)
 # NOTA: Si ALLOW_ALL_ORIGINS=True, no se puede usar allow_credentials=True
 # En producción, usar solo ALLOWED_ORIGINS específicos
-ALLOW_ALL_ORIGINS = os.getenv("ALLOW_ALL_ORIGINS", "false").lower() == "true"
+ALLOW_ALL_ORIGINS = os.getenv("ALLOW_ALL_ORIGINS", "true").lower() == "true"
 
 # ==================== CONFIGURACIÓN DE MIDDLEWARE ====================
 

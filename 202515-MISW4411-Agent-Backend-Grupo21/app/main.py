@@ -24,14 +24,12 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title = "202515 MISW4411 Agent Backend Template")
 
 
-# Configurar CORS para permitir peticiones desde el frontend
+# Configurar CORS para permitir peticiones desde cualquier origen
+# NOTA: allow_credentials debe ser False cuando allow_origins=["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Frontend local
-        "http://127.0.0.1:3000"   # Alternativa localhost
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # Permitir todos los orígenes
+    allow_credentials=False,  # No compatible con allow_origins=["*"]
     allow_methods=["*"],  
     allow_headers=["*"], 
 )

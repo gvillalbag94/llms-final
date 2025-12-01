@@ -3,14 +3,11 @@ services:
   rag-backend:
     container_name: rag-backend
     build:
-      context: ./202515-MISW4411-Backend-Grupo21
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./202515-MISW4411-Backend-Grupo21/Dockerfile
     # env_file opcional - descomentar si tienes un archivo .env
     env_file:
       - ./202515-MISW4411-Backend-Grupo21/.env
-    volumes:
-      # Montar el archivo de credenciales de servicio dentro del contenedor
-      - /Users/felipev9/Documents/andes/llms/llms-final/apikey.json:/app/apikey.json:ro
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -27,8 +24,8 @@ services:
   agent-backend:
     container_name: agent-backend
     build:
-      context: ./202515-MISW4411-Agent-Backend-Grupo21/app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./202515-MISW4411-Agent-Backend-Grupo21/app/Dockerfile
     # env_file opcional - descomentar si tienes un archivo .env
     env_file:
       - ./202515-MISW4411-Agent-Backend-Grupo21/app/.env
@@ -36,9 +33,6 @@ services:
       # Usar el nombre del servicio para conectarse al RAG backend
       - RAG_BASE_URL=http://rag-backend:8000
       - GOOGLE_APPLICATION_CREDENTIALS=/app/keys/apikey.json
-    volumes:
-      # Montar el archivo de credenciales de servicio dentro del contenedor
-      - /Users/felipev9/Documents/andes/llms/llms-final/apikey.json:/app/keys/apikey.json:ro
     ports:
       - "8001:8000"
     depends_on:

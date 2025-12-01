@@ -20,15 +20,18 @@ ENV LC_ALL=C.UTF-8
 WORKDIR /app
 
 # Copy requirements first for better Docker layer caching
-COPY requirements.txt .
+COPY 202515-MISW4411-Backend-Grupo21/requirements.txt .
 
 # Upgrade pip and install requirements in one layer
 # Using --no-cache-dir to reduce image size
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
+# Copy apikey.json from root directory
+COPY apikey.json ./apikey.json
+
 # Copy application code (this layer will be rebuilt only when code changes)
-COPY . .
+COPY 202515-MISW4411-Backend-Grupo21/ .
 
 # Expose the port where FastAPI will run
 EXPOSE 8000
