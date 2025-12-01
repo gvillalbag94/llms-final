@@ -35,7 +35,7 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/keys/apikey.json
     volumes:
       # Montar el archivo de credenciales de servicio dentro del contenedor
-      - /Users/felipev9/Documents/andes/final/apikey.json:/app/keys/apikey.json:ro
+      - /Users/felipev9/Documents/andes/llms/llms-final/apikey.json:/app/keys/apikey.json:ro
     ports:
       - "8001:8000"
     depends_on:

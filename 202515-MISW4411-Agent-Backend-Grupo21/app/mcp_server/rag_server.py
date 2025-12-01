@@ -46,9 +46,9 @@ mcp = FastMCP("rag-server")
 # ===============================================================================
 
 # URL del backend RAG (configurable mediante variable de entorno)
-# El servidor MCP se ejecuta dentro del contenedor Docker, por lo que necesita
-# usar host.docker.internal para acceder al host donde corre el RAG
-RAG_BASE_URL = os.getenv("RAG_BASE_URL", "http://host.docker.internal:8001")
+# El servidor MCP se ejecuta dentro del contenedor Docker, por lo que debe
+# usar el nombre del servicio Docker para conectarse al RAG backend
+RAG_BASE_URL = os.getenv("RAG_BASE_URL", "http://rag-backend:8000")
 RAG_ENDPOINT = f"{RAG_BASE_URL}/api/v1/ask"
 
 # Log la URL configurada para debugging (solo al inicio del módulo)
@@ -78,10 +78,9 @@ async def ask(query: str) -> str:
         Exception: Si hay un error de conexión o timeout con el backend RAG
     """
     try:
-        # Forzar el uso de host.docker.internal:8001 ya que el servidor MCP
-        # se ejecuta dentro del contenedor Docker y necesita acceder al host
-        # El proceso 'uv run' puede no heredar variables de entorno correctamente
-        current_rag_url = "http://host.docker.internal:8001"
+        # Usar la variable de entorno RAG_BASE_URL si está disponible
+        # Si no, usar el valor por defecto (que debería estar configurado en docker-compose)
+        current_rag_url = os.getenv("RAG_BASE_URL", "http://rag-backend:8000")
         current_endpoint = f"{current_rag_url}/api/v1/ask"
         
         logger.info(f"[MCP RAG] Consultando RAG backend con pregunta: {query[:100]}...")
